@@ -264,7 +264,7 @@ export async function verifyAvatarOwnershipSignature(
     const { SIGNATURE_PREFIX, sha256Hex } = await import("@/lib/viewer-signature")
     const message = `phase-avatar:v1:${await sha256Hex(JSON.stringify({ wallet, imageUrl }))}`
     const data = new TextEncoder().encode(SIGNATURE_PREFIX + message)
-    return Keypair.fromPublicKey(wallet).verify(data, Buffer.from(signatureBase64, "base64"))
+    return Keypair.fromPublicKey(wallet).verify(Buffer.from(data), Buffer.from(signatureBase64, "base64"))
   } catch {
     return false
   }
