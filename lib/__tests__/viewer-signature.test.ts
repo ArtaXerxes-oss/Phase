@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import assert from "node:assert/strict"
 import { test } from "vitest"
 import { Keypair } from "@stellar/stellar-sdk"
@@ -46,7 +46,7 @@ test("verifySignalSignature rejects tampered content", async () => {
   const kp = Keypair.random()
   const payload = { title: "Hello", body: "World", timestamp: 1234567890 }
   const signature = await signPayload(payload, kp)
-  // Body changed after signing â€” signature must no longer verify.
+  // Body changed after signing — signature must no longer verify.
   const tampered = await verifySignalSignature(kp.publicKey(), { ...payload, body: "Tampered" }, signature)
   assert.equal(tampered, false)
 })
