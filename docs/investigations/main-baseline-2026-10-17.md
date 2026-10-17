@@ -17,6 +17,7 @@ Branch `chore/fix-main-baseline`, cut from `main` at `74308a0`.
 - **Encoding damage (0d14b9a).** Several files were re-encoded as cp1252-decoded UTF-8 and given a BOM plus `// @ts-nocheck`. Spanish UI strings shipped as `TransacciÃ³n` and `â€¦`, and `●` / `”` were lost. Repaired.
 - **Incomplete refactor (60001c5, #33).** `fusion-chamber.tsx` imported ten `components/chamber/*` modules. Four were never committed and five were one-word `placeholder` files. The four used ones are recreated verbatim from the deleted code. The placeholders are removed.
 - **Merge losses.** The collab-split fan-out in the offers route, `IpfsDisplayImg`'s `fallback` prop, `washScreenReasonForEdition`, `viewerSignatureShort`, and the four b89c4f2 tables (`exhibitions`, `price_suggestions`, `moderation_queue`, `quest_arcs`) were all restored from the commits that introduced them.
+- **Every page crashed in the browser.** `lib/stellar-wallet-kit.ts` (loaded by the wallet provider on every route) imported `randomUUID` from `node:crypto`, which the client polyfill doesn't provide, so hydration threw `randomUUID is not a function`. It now uses `globalThis.crypto.randomUUID()` (the code path is browser-only). Found with a headless Chromium smoke test.
 - **Real bugs found on the way:** an SSRF gap in `validateWebhookUrl` (`127.0.0.1`, `172.16/12` and others accepted), settle verification in `lib/stellar.ts` that could never succeed (meta v4 unread, `ContractEventV0.contractId()` gone), artist attestation never reading `true`, and a winback route calling a function that never existed.
 
 ## Blocked: phase-protocol error discriminants (needs a maintainer decision)
@@ -38,4 +39,5 @@ The original values exist in history but conflict, so restoring them means choos
 - **Flag collision:** b89c4f2 used `phase-142`/`phase-143` for the curator and pricing oracle, while `lib/feature-flags.ts` documents `phase-142` as AI thumbnails and `phase-143` as churn/winback. Both features read the same env var.
 - **Other 3e4b562 losses:** most of its `app/api/market/route.ts` edition/split changes and its doc rows are gone. Restoring them is feature work, not a baseline fix.
 - **Lint:** 286 pre-existing errors, so the CI lint step stays non-blocking.
+- **CSP blocks the ticker:** `connect-src` doesn't allow `api.coingecko.com` or `timeapi.io`, which `components/system-ticker.tsx` fetches, so XLM price and EST time never load in the browser. Widening the CSP is a security call for a maintainer.
 - **Build tracing warnings:** `lib/settlement-store.ts` makes Next trace the whole project from `/api/x402/verify`.

@@ -15,7 +15,6 @@ import {
   WALLET_CONNECT_ID,
 } from "@creit.tech/stellar-wallets-kit/modules/wallet-connect"
 import { albedoImplicitTxAllowed, isAlbedoSelectedInKit } from "@/lib/albedo-intent-client"
-import { randomUUID } from "node:crypto"
 
 let initialized = false
 
@@ -36,7 +35,8 @@ const WC_PROJECT_ID =
 
 function generatePostMessageNonce(): string {
   if (typeof window === "undefined") return ""
-  const nonce = randomUUID()
+  // Browser-only path: node:crypto has no randomUUID in the client polyfill and crashed every page.
+  const nonce = globalThis.crypto.randomUUID()
   try {
     window.localStorage.setItem(LS_POSTMESSAGE_NONCE, nonce)
     window.localStorage.setItem(LS_POSTMESSAGE_ORIGIN, window.location.origin)
