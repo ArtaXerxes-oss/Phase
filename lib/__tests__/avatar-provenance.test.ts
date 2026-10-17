@@ -19,14 +19,14 @@ import { CidIntegrityError, sha256Hex, verifyCID, verifyBytesIntegrity } from "@
 const SIGNATURE_PREFIX = "Stellar Signed Message:\n"
 
 async function avatarMessage(wallet: string, imageUrl: string): Promise<string> {
-  return `phase-avatar:v1:${await sha256Hex(JSON.stringify({ wallet, imageUrl }))}`
+  return `phase-avatar:v1:${sha256Hex(new TextEncoder().encode(JSON.stringify({ wallet, imageUrl })))}`
 }
 
 async function verifyOwnership(wallet: string, imageUrl: string, signatureBase64: string) {
   try {
     const message = await avatarMessage(wallet, imageUrl)
     const data = new TextEncoder().encode(SIGNATURE_PREFIX + message)
-    return Keypair.fromPublicKey(wallet).verify(data, Buffer.from(signatureBase64, "base64"))
+    return Keypair.fromPublicKey(wallet).verify(Buffer.from(data), Buffer.from(signatureBase64, "base64"))
   } catch {
     return false
   }

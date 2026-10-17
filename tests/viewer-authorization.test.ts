@@ -29,7 +29,7 @@ const CONTRACT = "CB3JUB4X5JJ2WDKRTQ5JZ2XHXZQSDY2MCT5JUUJ2QHZ2Z6F2S2VZQ2QZQ2"
 async function signBytes(seedHex: string, bytes: Uint8Array): Promise<string> {
   const { Keypair } = await import("@stellar/stellar-sdk")
   const kp = Keypair.fromRawEd25519Seed(Buffer.from(seedHex, "hex"))
-  return Buffer.from(kp.sign(bytes)).toString("base64")
+  return Buffer.from(kp.sign(Buffer.from(bytes))).toString("base64")
 }
 
 const SEED = "a".repeat(64)
