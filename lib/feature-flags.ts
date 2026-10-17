@@ -43,6 +43,14 @@
  * - phase-145: gauge voting for emissions with ve-weight directing quest budgets
  * - phase-154: outbound webhook subscriptions — signed event delivery to
  *   third-party endpoints (partial slice of spike 664 / issue #527)
+ * - phase-159: route-scoped smooth scroll, compositor-only motion, reduced-motion
+ *   aware flap/ticker (spike 659 / issue #522)
+ * - phase-161: creator CLI JSON output and offline metadata validation parity
+ *   (spike 661 / issue #524)
+ * - phase-162: interactive docs playground / try-it-live API console
+ *   (spike 662 / issue #525)
+ * - phase-163: API version negotiation, deprecation headers and OpenAPI
+ *   contract (spike 663 / issue #526)
  */
 
 export type PhaseFeatureFlag =
@@ -86,7 +94,6 @@ export type PhaseFeatureFlag =
   | "phase-124"
   | "phase-127"
   | "phase-128"
-  | "phase-128"
   | "phase-130"
   | "phase-131"
   | "phase-132"
@@ -105,7 +112,21 @@ export type PhaseFeatureFlag =
   | "phase-143"
   | "phase-144"
   | "phase-145"
-  | "phase-154";
+  | "phase-154"
+  | "phase-146"
+  | "phase-147"
+  | "phase-148"
+  | "phase-149"
+  | "phase-150"
+  | "phase-151"
+  | "phase-152"
+  | "phase-153"
+  | "phase-editions"
+  | "phase-timed-drops"
+  | "phase-159"
+  | "phase-161"
+  | "phase-162"
+  | "phase-163";
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-66": ["NEXT_PUBLIC_FEATURE_PHASE_66", "FEATURE_PHASE_66"],
@@ -167,6 +188,20 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-144": ["NEXT_PUBLIC_FEATURE_PHASE_144", "FEATURE_PHASE_144"],
   "phase-145": ["NEXT_PUBLIC_FEATURE_PHASE_145", "FEATURE_PHASE_145"],
   "phase-154": ["NEXT_PUBLIC_FEATURE_PHASE_154", "FEATURE_PHASE_154"],
+  "phase-146": ["NEXT_PUBLIC_FEATURE_PHASE_146", "FEATURE_PHASE_146"],
+  "phase-147": ["NEXT_PUBLIC_FEATURE_PHASE_147", "FEATURE_PHASE_147"],
+  "phase-148": ["NEXT_PUBLIC_FEATURE_PHASE_148", "FEATURE_PHASE_148"],
+  "phase-149": ["NEXT_PUBLIC_FEATURE_PHASE_149", "FEATURE_PHASE_149"],
+  "phase-150": ["NEXT_PUBLIC_FEATURE_PHASE_150", "FEATURE_PHASE_150"],
+  "phase-151": ["NEXT_PUBLIC_FEATURE_PHASE_151", "FEATURE_PHASE_151"],
+  "phase-152": ["NEXT_PUBLIC_FEATURE_PHASE_152", "FEATURE_PHASE_152"],
+  "phase-153": ["NEXT_PUBLIC_FEATURE_PHASE_153", "FEATURE_PHASE_153"],
+  "phase-editions": ["NEXT_PUBLIC_FEATURE_PHASE_EDITIONS", "FEATURE_PHASE_EDITIONS"],
+  "phase-timed-drops": ["NEXT_PUBLIC_FEATURE_PHASE_TIMED_DROPS", "FEATURE_PHASE_TIMED_DROPS"],
+  "phase-159": ["NEXT_PUBLIC_FEATURE_PHASE_159", "FEATURE_PHASE_159"],
+  "phase-161": ["NEXT_PUBLIC_FEATURE_PHASE_161", "FEATURE_PHASE_161"],
+  "phase-162": ["NEXT_PUBLIC_FEATURE_PHASE_162", "FEATURE_PHASE_162"],
+  "phase-163": ["NEXT_PUBLIC_FEATURE_PHASE_163", "FEATURE_PHASE_163"],
 };
 
 function isTruthy(v: string | undefined): boolean {
@@ -261,6 +296,20 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-144",
     "phase-145",
     "phase-154",
+    "phase-146",
+    "phase-147",
+    "phase-148",
+    "phase-149",
+    "phase-150",
+    "phase-151",
+    "phase-152",
+    "phase-153",
+    "phase-editions",
+    "phase-timed-drops",
+    "phase-159",
+    "phase-161",
+    "phase-162",
+    "phase-163",
   ];
   // Filtering is evaluated at call time, allowing runtime test overrides.
   return all.filter(isFeatureEnabled)
