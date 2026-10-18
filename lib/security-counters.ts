@@ -55,7 +55,11 @@ export type SecurityCounterName =
   | "wc_session_expired"
   | "wc_reconnect_success"
   | "wc_reconnect_failed"
-  | "wc_chain_mismatch_blocked";
+  | "wc_chain_mismatch_blocked"
+  | "xbull_connect_success"
+  | "xbull_sign_success"
+  | "xbull_sign_rejected"
+  | "xbull_trustline_success";
 
 const counters = new Map<SecurityCounterName, number>()
 

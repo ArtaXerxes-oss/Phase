@@ -1370,7 +1370,15 @@ export const phaseCopy: Record<
       relayDisconnected: "Relay websocket connection lost. Attempting auto-reconnect…",
       reconnectedToast: "WalletConnect session restored successfully.",
     },
+    xbullParity: {
+      badge: "xBull",
+      signPrompt: "Confirm transaction in xBull wallet",
+      trustlinePrompt: "Confirm PHASELQ trustline in xBull wallet",
+      rejected: "Transaction rejected in xBull wallet",
+      networkMismatch: "xBull network mismatch: please switch to Stellar Testnet",
+    },
   },
+
   es: {
     nav: {
       home: "← Inicio",
@@ -2007,7 +2015,15 @@ export const phaseCopy: Record<
       relayDisconnected: "Conexión con el relay perdida. Intentando reconexión automática…",
       reconnectedToast: "Sesión de WalletConnect restaurada con éxito.",
     },
+    xbullParity: {
+      badge: "xBull",
+      signPrompt: "Confirmar transacción en la billetera xBull",
+      trustlinePrompt: "Confirmar línea de confianza PHASELQ en xBull",
+      rejected: "Transacción rechazada en la billetera xBull",
+      networkMismatch: "Red de xBull incorrecta: por favor seleccioná Stellar Testnet",
+    },
   },
+
 }
 
 /** Only accept locales that are part of the copy registry.  This deliberately

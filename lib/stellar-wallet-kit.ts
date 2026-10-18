@@ -16,6 +16,12 @@ import {
 } from "@creit.tech/stellar-wallets-kit/modules/wallet-connect"
 import { albedoImplicitTxAllowed, isAlbedoSelectedInKit } from "@/lib/albedo-intent-client"
 import { getWalletConnectRelayUrl } from "@/lib/walletconnect-resilience"
+import {
+  XBULL_ID,
+  isXBullSelected,
+  normalizeXBullSignResult,
+  mapXBullError,
+} from "@/lib/xbull-adapter"
 import { randomUUID } from "node:crypto"
 
 let initialized = false
@@ -120,6 +126,8 @@ export {
   FREIGHTER_ID,
   LEDGER_ID,
   WALLET_CONNECT_ID,
+  XBULL_ID,
+  isXBullSelected,
   KitEventType,
   Networks,
   parseError,
@@ -195,6 +203,17 @@ export async function signTransaction(
       error: {
         message: "Wallet Kit security check failed: origin mismatch. This may indicate a hijack attempt.",
       },
+    }
+  }
+
+  // ── xBull signing and error normalization ─────────────────────────────────
+  if (typeof window !== "undefined" && isXBullSelected()) {
+    try {
+      const rawRes = await StellarWalletsKit.signTransaction(xdr, opts)
+      return normalizeXBullSignResult(rawRes)
+    } catch (err: unknown) {
+      const mapped = mapXBullError(err)
+      return { error: { message: mapped.message } }
     }
   }
 

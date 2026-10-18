@@ -20,6 +20,7 @@ import {
   initStellarWalletKit,
   isHardwareWalletSelected,
   isWalletConnectSelected,
+  isXBullSelected,
   kit,
   KitEventType,
   parseError,
@@ -43,6 +44,8 @@ type WalletContextValue = {
   isHardwareWallet: boolean
   /** Whether the active module is WalletConnect. */
   isWalletConnect: boolean
+  /** Whether the active module is xBull. */
+  isXBull: boolean
   connect: () => Promise<void>
   disconnect: () => void
   /** Re-sync con la wallet vÃ­a kit; devuelve la direcciÃ³n activa o null. */
@@ -94,6 +97,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [aliasLoading, setAliasLoading] = useState(false)
   const [isHardwareWallet, setIsHardwareWallet] = useState(false)
   const [isWalletConnect, setIsWalletConnect] = useState(false)
+  const [isXBull, setIsXBull] = useState(false)
   const [qrReceiveOpen, setQrReceiveOpen] = useState(false)
 
   /** True when user deliberately disconnected â€” blocks session restoration. */
@@ -116,6 +120,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const syncModuleFlags = useCallback(() => {
     setIsHardwareWallet(isHardwareWalletSelected())
     setIsWalletConnect(isWalletConnectSelected())
+    setIsXBull(isXBullSelected())
   }, [])
 
   const syncAlbedoTxPrep = useCallback(async (addr: string | null) => {
@@ -547,6 +552,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setNetworkMismatch(null)
     setIsHardwareWallet(false)
     setIsWalletConnect(false)
+    setIsXBull(false)
   }, [stopHeartbeat])
 
   // â”€â”€ context value â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -560,6 +566,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       aliasLoading,
       isHardwareWallet,
       isWalletConnect,
+      isXBull,
       connect,
       disconnect,
       refresh,
@@ -576,6 +583,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       aliasLoading,
       isHardwareWallet,
       isWalletConnect,
+      isXBull,
       connect,
       disconnect,
       refresh,

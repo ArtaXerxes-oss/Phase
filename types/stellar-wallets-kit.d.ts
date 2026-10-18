@@ -126,3 +126,10 @@ declare module '@creit.tech/stellar-wallets-kit/modules/wallet-connect' {
   }
 }
 
+declare module '@creit.tech/stellar-wallets-kit/modules/xbull' {
+  export const XBULL_ID: string;
+  export class xBullModule {
+    constructor(config?: any);
+  }
+}
+
