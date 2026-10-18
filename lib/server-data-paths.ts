@@ -45,7 +45,9 @@ const FILES = {
   licenseAttestations: "license-attestations.json",
   qrAudit: "qr-audit.json",
   walletSessions: "wallet-sessions.json",
+  ledgerAudit: "ledger-audit.json",
 } as const
+
 
 export type ServerDataFile = keyof typeof FILES
 

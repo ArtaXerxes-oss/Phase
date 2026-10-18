@@ -133,3 +133,16 @@ declare module '@creit.tech/stellar-wallets-kit/modules/xbull' {
   }
 }
 
+declare module '@creit.tech/stellar-wallets-kit/modules/ledger' {
+  export const LEDGER_ID: string;
+  export interface LedgerModuleConfig {
+    transport?: any;
+    bip32Path?: string;
+    clearSigningEnabled?: boolean;
+  }
+  export class LedgerModule {
+    constructor(config?: LedgerModuleConfig);
+  }
+}
+
+

@@ -61,9 +61,11 @@
  * - phase-166: QR code flows for receive, offer-claim and referral share with camera scan (spike 622 / issue #485)
  * - phase-167: WalletConnect v2 mobile session resilience with reconnect and chain-switch (spike 623 / issue #486)
  * - phase-168: xBull full support with sign, trustline and Freighter-difference matrix (spike 624 / issue #487)
+ * - phase-169: Ledger blind-signing to clear-signing review for Soroban transactions (spike 625 / issue #488)
  */
 
 export type PhaseFeatureFlag =
+
   | "phase-66"
   | "phase-77"
   | "phase-78"
@@ -134,7 +136,9 @@ export type PhaseFeatureFlag =
   | "phase-165"
   | "phase-166"
   | "phase-167"
-  | "phase-168";
+  | "phase-168"
+  | "phase-169";
+
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-66": ["NEXT_PUBLIC_FEATURE_PHASE_66", "FEATURE_PHASE_66"],
@@ -207,7 +211,9 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-166": ["NEXT_PUBLIC_FEATURE_PHASE_166", "FEATURE_PHASE_166"],
   "phase-167": ["NEXT_PUBLIC_FEATURE_PHASE_167", "FEATURE_PHASE_167"],
   "phase-168": ["NEXT_PUBLIC_FEATURE_PHASE_168", "FEATURE_PHASE_168"],
+  "phase-169": ["NEXT_PUBLIC_FEATURE_PHASE_169", "FEATURE_PHASE_169"],
 };
+
 
 function isTruthy(v: string | undefined): boolean {
   // Accept common deployment-system spellings while keeping unset values disabled.
@@ -312,7 +318,9 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-166",
     "phase-167",
     "phase-168",
+    "phase-169",
   ];
+
   // Filtering is evaluated at call time, allowing runtime test overrides.
   return all.filter(isFeatureEnabled)
 }

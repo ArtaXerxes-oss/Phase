@@ -22,7 +22,14 @@ import {
   normalizeXBullSignResult,
   mapXBullError,
 } from "@/lib/xbull-adapter"
+import { isFeatureEnabled } from "@/lib/feature-flags"
+import {
+  decodeSorobanTransaction,
+  validateLedgerPreflight,
+  mapLedgerHardwareError,
+} from "@/lib/ledger-soroban-decoder"
 import { randomUUID } from "node:crypto"
+
 
 let initialized = false
 
@@ -183,6 +190,21 @@ export async function signTransaction(
     if (opts.networkPassphrase === MAINNET_PASSPHRASE) {
       console.warn("[PHASE] Ledger: signing a MAINNET transaction — ensure your Ledger Stellar app is in mainnet mode.")
     }
+
+    // ── Ledger clear-signing & preflight gate #13 (phase-169) ─────────────────
+    if (isFeatureEnabled("phase-169")) {
+      const decoded = decodeSorobanTransaction(xdr, opts.networkPassphrase)
+      if (decoded) {
+        const preflight = validateLedgerPreflight(decoded, opts.address)
+        if (!preflight.valid) {
+          return {
+            error: {
+              message: `Ledger Preflight Blocked: ${preflight.errors.join("; ")}`,
+            },
+          }
+        }
+      }
+    }
   }
 
   // ── Albedo implicit-tx guard ───────────────────────────────────────────────
@@ -221,6 +243,13 @@ export async function signTransaction(
     const { signedTxXdr } = await StellarWalletsKit.signTransaction(xdr, opts)
     return { signedTxXdr, signedTransaction: signedTxXdr }
   } catch (e: unknown) {
+    if (isHardwareWalletSelected()) {
+      const hw = mapLedgerHardwareError(e)
+      if (hw.code !== "LEDGER_SIGN_ERROR") {
+        return { error: { message: hw.message } }
+      }
+    }
+
     const err = parseError(e)
     const raw = err.message ?? ""
     let message = raw
@@ -238,3 +267,4 @@ export async function signTransaction(
     return { error: { message } }
   }
 }
+

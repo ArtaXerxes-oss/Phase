@@ -1377,7 +1377,21 @@ export const phaseCopy: Record<
       rejected: "Transaction rejected in xBull wallet",
       networkMismatch: "xBull network mismatch: please switch to Stellar Testnet",
     },
+    ledgerClearSigning: {
+      title: "Ledger Clear-Signing Review",
+      description: "Inspect call parameters before transmitting payload to hardware",
+      targetContract: "Target Contract",
+      hostFunction: "Host Function",
+      verificationCode: "Ledger Verification Code",
+      matchCodePrompt: "Match with on-device hash pre-image",
+      acknowledgePrompt: "I have verified the contract ID and parameters match my intent",
+      approveButton: "Verify & Send to Device",
+      cancelButton: "Cancel",
+      blindSigningDisabled: "Blind signing is disabled in Ledger Stellar app settings. Set to Enabled or Clear signing to continue.",
+      gate13RiskAlert: "Contract Execution Blocked: Gate #13 Pre-empted (SelfTransfer or invalid authorization).",
+    },
   },
+
 
   es: {
     nav: {
@@ -2022,7 +2036,21 @@ export const phaseCopy: Record<
       rejected: "Transacción rechazada en la billetera xBull",
       networkMismatch: "Red de xBull incorrecta: por favor seleccioná Stellar Testnet",
     },
+    ledgerClearSigning: {
+      title: "Revisión Clear-Signing de Ledger",
+      description: "Inspeccioná los parámetros antes de transmitir la carga al dispositivo",
+      targetContract: "Contrato destino",
+      hostFunction: "Función host",
+      verificationCode: "Código de verificación Ledger",
+      matchCodePrompt: "Compará con la preimagen en la pantalla del dispositivo",
+      acknowledgePrompt: "Verifiqué que el ID de contrato y los parámetros coinciden con mi intención",
+      approveButton: "Verificar y enviar al dispositivo",
+      cancelButton: "Cancelar",
+      blindSigningDisabled: "Firma ciega deshabilitada en la app Stellar del Ledger. Habilitá Blind signing en Configuración.",
+      gate13RiskAlert: "Ejecución bloqueada: Gate #13 prevenido (auto-transferencia o autorización inválida).",
+    },
   },
+
 
 }
 

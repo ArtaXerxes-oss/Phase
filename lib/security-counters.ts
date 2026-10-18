@@ -57,9 +57,18 @@ export type SecurityCounterName =
   | "wc_reconnect_failed"
   | "wc_chain_mismatch_blocked"
   | "xbull_connect_success"
+  | "xbull_sign_requested"
   | "xbull_sign_success"
   | "xbull_sign_rejected"
-  | "xbull_trustline_success";
+  | "xbull_trustline_signed"
+  | "xbull_trustline_success"
+  | "xbull_error_mapped"
+  | "ledger_clear_signing_reviewed"
+  | "ledger_clear_signing_approved"
+  | "ledger_clear_signing_rejected"
+  | "ledger_blind_signing_blocked"
+  | "ledger_gate13_preempted";
+
 
 const counters = new Map<SecurityCounterName, number>()
 

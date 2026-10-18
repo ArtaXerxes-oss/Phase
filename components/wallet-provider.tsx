@@ -29,6 +29,9 @@ import {
 import { cn } from "@/lib/utils"
 import { QrCodeDialog } from "@/components/qr-code-dialog"
 import { WalletConnectBanner } from "@/components/walletconnect-banner"
+import { LedgerClearSigningModal } from "@/components/ledger-clear-signing-modal"
+import type { DecodedSorobanInvocation } from "@/lib/ledger-soroban-decoder"
+
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Types
@@ -58,7 +61,9 @@ type WalletContextValue = {
   refreshArtistAlias: () => Promise<string | null>
   saveArtistAlias: (alias: string) => Promise<{ ok: true } | { ok: false; error: string }>
   openQrReceive: () => void
+  requestLedgerReview?: (decoded: DecodedSorobanInvocation) => Promise<boolean>
 }
+
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Constants
@@ -113,6 +118,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Network passphrase mismatch alert â€” shown when Ledger is connected but the
   // kit's active network doesn't match TESTNET_PASSPHRASE.
   const [networkMismatch, setNetworkMismatch] = useState<string | null>(null)
+  const [ledgerReviewModal, setLedgerReviewModal] = useState<{
+    isOpen: boolean
+    decoded: DecodedSorobanInvocation | null
+    resolve: (approved: boolean) => void
+  } | null>(null)
+
+  const requestLedgerReview = useCallback((decoded: DecodedSorobanInvocation): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setLedgerReviewModal({
+        isOpen: true,
+        decoded,
+        resolve,
+      })
+    })
+  }, [])
 
   // â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -574,6 +594,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       refreshArtistAlias,
       saveArtistAlias,
       openQrReceive: () => setQrReceiveOpen(true),
+      requestLedgerReview,
     }),
     [
       address,
@@ -590,8 +611,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       openWalletPicker,
       refreshArtistAlias,
       saveArtistAlias,
+      requestLedgerReview,
     ],
   )
+
 
   // â”€â”€ render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -688,8 +711,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           address={address}
         />
       )}
+
+      {ledgerReviewModal?.isOpen && (
+        <LedgerClearSigningModal
+          isOpen={ledgerReviewModal.isOpen}
+          decoded={ledgerReviewModal.decoded}
+          onApprove={() => {
+            ledgerReviewModal.resolve(true)
+            setLedgerReviewModal(null)
+          }}
+          onCancel={() => {
+            ledgerReviewModal.resolve(false)
+            setLedgerReviewModal(null)
+          }}
+        />
+      )}
     </>
   )
+
 }
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -684,4 +684,16 @@ Flag: `phase-168` (`NEXT_PUBLIC_FEATURE_PHASE_168` / `FEATURE_PHASE_168`). Defau
 - `lib/stellar-wallet-kit.ts`: Normalized signing pipeline routing xBull transactions through error mapping and result unpackers.
 - Audit counters: `xbull_sign_requested`, `xbull_sign_success`, `xbull_sign_rejected`, `xbull_trustline_signed`, `xbull_error_mapped` in `lib/security-counters.ts`.
 
+## 19. Ledger blind-signing to clear-signing review for Soroban (spike 625)
+
+Flag: `phase-169` (`NEXT_PUBLIC_FEATURE_PHASE_169` / `FEATURE_PHASE_169`). Default off. See `PROJECT_ARCHITECTURE.md` §10.
+
+- `lib/ledger-soroban-decoder.ts`: Decodes `invokeHostFunction` operations, extracts contract address, host function name (`settle`, `create_collection`, `transfer`, `initiate_phase`), and native arguments. Computes canonical verification hash and 8-character verification code (`VREF-XXXX-XXXX`) matching on-device pre-image. Performs preflight validation to catch Gate #13 errors (`SelfTransfer` and invalid caller/balance) before prompting hardware.
+- `components/ledger-clear-signing-modal.tsx`: Preflight review modal showing contract target, function, decoded arguments, fee, and verification code with confirmation before transmitting to device.
+- `lib/phase-host-error.ts`: Added `humanizeLedgerHardwareErrorMessage` recognizing `0x6b0c` / `0x6a15` (blind-signing disabled in Ledger Stellar app settings), `0x6985` (user rejected), and `0x6e00` (device locked or disconnected).
+- `lib/stellar-wallet-kit.ts`: Intercepts hardware wallet signing with preflight validation when `phase-169` is enabled.
+- Audit counters: `ledger_clear_signing_reviewed`, `ledger_clear_signing_approved`, `ledger_clear_signing_rejected`, `ledger_blind_signing_blocked`, `ledger_gate13_preempted` in `lib/security-counters.ts`.
+- Routes: `POST /api/wallet/ledger` for clear-signing lifecycle telemetry.
+
+
 
