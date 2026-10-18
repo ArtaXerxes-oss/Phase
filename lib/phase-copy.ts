@@ -1362,6 +1362,14 @@ export const phaseCopy: Record<
       manualEntry: "Or enter address manually",
       cameraError: "Camera access unavailable",
     },
+    walletConnectResilience: {
+      title: "WalletConnect v2 Resilience",
+      reconnectPrompt: "WalletConnect session dropped. Click Reconnect to restore mobile link.",
+      chainMismatch: "Wallet chain mismatch: your wallet is connected to a different network. Switch to Stellar Testnet in your mobile wallet.",
+      openMobileWallet: "Open mobile wallet to sign",
+      relayDisconnected: "Relay websocket connection lost. Attempting auto-reconnect…",
+      reconnectedToast: "WalletConnect session restored successfully.",
+    },
   },
   es: {
     nav: {
@@ -1990,6 +1998,14 @@ export const phaseCopy: Record<
       viewQr: "Ver QR",
       manualEntry: "O ingresá la dirección manualmente",
       cameraError: "Acceso a cámara no disponible",
+    },
+    walletConnectResilience: {
+      title: "Resiliencia WalletConnect v2",
+      reconnectPrompt: "Sesión WalletConnect interrumpida. Hacé clic en Reconectar para restaurar el enlace móvil.",
+      chainMismatch: "Red incorrecta en wallet: tu wallet está conectada a otra red. Cambiá a Stellar Testnet en tu wallet móvil.",
+      openMobileWallet: "Abrir wallet móvil para firmar",
+      relayDisconnected: "Conexión con el relay perdida. Intentando reconexión automática…",
+      reconnectedToast: "Sesión de WalletConnect restaurada con éxito.",
     },
   },
 }

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic"
 import { createPortal } from "react-dom"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { signTransaction } from "@/lib/stellar-wallet-kit"
+import { recordMobileDeepLinkReturn } from "@/lib/walletconnect-resilience"
 import { FeeBumpTransaction, Transaction, TransactionBuilder, Networks } from "@stellar/stellar-sdk"
 import { LangToggle } from "@/components/lang-toggle"
 import { useLang } from "@/components/lang-context"
@@ -518,6 +519,7 @@ export default function ForgePage() {
 
       try {
         const txEnvelopeCreate = await buildCreateCollectionTransaction(addr, trimmedName, stroops, finalUri)
+        recordMobileDeepLinkReturn()
         const signCreate = await signTransaction(txEnvelopeCreate, {
           networkPassphrase: NETWORK_PASSPHRASE,
           address: addr,

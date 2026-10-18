@@ -15,6 +15,7 @@ import {
   WALLET_CONNECT_ID,
 } from "@creit.tech/stellar-wallets-kit/modules/wallet-connect"
 import { albedoImplicitTxAllowed, isAlbedoSelectedInKit } from "@/lib/albedo-intent-client"
+import { getWalletConnectRelayUrl } from "@/lib/walletconnect-resilience"
 import { randomUUID } from "node:crypto"
 
 let initialized = false
@@ -85,15 +86,18 @@ export function initStellarWalletKit() {
     }
   }
 
+  const relayUrl = getWalletConnectRelayUrl()
+
   const walletConnectModule = new WalletConnectModule({
     projectId: WC_PROJECT_ID,
+    relayUrl,
     metadata: {
       name: "PHASE Protocol",
       description: "AI artifact minting gated by on-chain Stellar payment.",
       url: typeof window !== "undefined" ? window.location.origin : "https://phase.app",
       icons: ["https://phase.app/icon.png"],
     },
-    allowedChains: [WalletConnectTargetChain.TESTNET],
+    allowedChains: [WalletConnectTargetChain.TESTNET, WalletConnectTargetChain.PUBLIC],
   })
 
   const ledgerModule = new LedgerModule()

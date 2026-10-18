@@ -27,6 +27,7 @@ import {
 } from "@/lib/stellar-wallet-kit"
 import { cn } from "@/lib/utils"
 import { QrCodeDialog } from "@/components/qr-code-dialog"
+import { WalletConnectBanner } from "@/components/walletconnect-banner"
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Types
@@ -589,6 +590,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   return (
     <>
       <WalletContext.Provider value={value}>{children}</WalletContext.Provider>
+
+      <WalletConnectBanner />
 
       {/* â”€â”€ Network passphrase mismatch alert (Ledger on wrong network) â”€â”€â”€â”€ */}
       {networkMismatch && address && isHardwareWallet && (

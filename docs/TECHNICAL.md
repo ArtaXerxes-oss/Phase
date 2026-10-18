@@ -664,3 +664,14 @@ Flag: `phase-166` (`NEXT_PUBLIC_FEATURE_PHASE_166` / `FEATURE_PHASE_166`). Defau
 - Routes: `GET /api/qr/encode` for server-side SVG generation.
 - Audit counters: `qr_generated_receive`, `qr_generated_referral`, `qr_scanned_success`, `qr_scanned_invalid`, `qr_camera_denied` in `lib/security-counters.ts`.
 
+## 17. WalletConnect v2 mobile session resilience (spike 623)
+
+Flag: `phase-167` (`NEXT_PUBLIC_FEATURE_PHASE_167` / `FEATURE_PHASE_167`). Default off. See `PROJECT_ARCHITECTURE.md` §10.
+
+- `lib/walletconnect-resilience.ts`: Configurable relay URL resolution, multi-chain target resolution (`stellar:testnet` and `stellar:pubnet`), session metadata persistence in localStorage (`@PHASE/wc_session_metadata`), chain-switch guard, and mobile deep-link return helpers.
+- `lib/stellar-wallet-kit.ts`: `WalletConnectModule` initialized with dynamic `relayUrl` and multi-chain array.
+- Components: `components/walletconnect-banner.tsx` displaying peer wallet connection status, relay state, and one-click session reconnect.
+- Routes: `POST /api/wallet/session` recording session lifecycle telemetry.
+- Audit counters: `wc_session_restored`, `wc_session_expired`, `wc_reconnect_success`, `wc_reconnect_failed`, `wc_chain_mismatch_blocked` in `lib/security-counters.ts`.
+
+

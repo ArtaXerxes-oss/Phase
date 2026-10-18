@@ -50,7 +50,12 @@ export type SecurityCounterName =
   | "qr_generated_referral"
   | "qr_scanned_success"
   | "qr_scanned_invalid"
-  | "qr_camera_denied";
+  | "qr_camera_denied"
+  | "wc_session_restored"
+  | "wc_session_expired"
+  | "wc_reconnect_success"
+  | "wc_reconnect_failed"
+  | "wc_chain_mismatch_blocked";
 
 const counters = new Map<SecurityCounterName, number>()
 

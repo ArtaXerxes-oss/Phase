@@ -59,6 +59,7 @@
  * - phase-164: self-attested age bands with 18+/21+ campaign gating (spike 637 / issue #499)
  * - phase-165: signed creator licensing attestation on world creation (spike 639 / issue #501)
  * - phase-166: QR code flows for receive, offer-claim and referral share with camera scan (spike 622 / issue #485)
+ * - phase-167: WalletConnect v2 mobile session resilience with reconnect and chain-switch (spike 623 / issue #486)
  */
 
 export type PhaseFeatureFlag =
@@ -130,7 +131,8 @@ export type PhaseFeatureFlag =
   | "phase-163"
   | "phase-164"
   | "phase-165"
-  | "phase-166";
+  | "phase-166"
+  | "phase-167";
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-66": ["NEXT_PUBLIC_FEATURE_PHASE_66", "FEATURE_PHASE_66"],
@@ -201,6 +203,7 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-164": ["NEXT_PUBLIC_FEATURE_PHASE_164", "FEATURE_PHASE_164"],
   "phase-165": ["NEXT_PUBLIC_FEATURE_PHASE_165", "FEATURE_PHASE_165"],
   "phase-166": ["NEXT_PUBLIC_FEATURE_PHASE_166", "FEATURE_PHASE_166"],
+  "phase-167": ["NEXT_PUBLIC_FEATURE_PHASE_167", "FEATURE_PHASE_167"],
 };
 
 function isTruthy(v: string | undefined): boolean {
@@ -304,6 +307,7 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-164",
     "phase-165",
     "phase-166",
+    "phase-167",
   ];
   // Filtering is evaluated at call time, allowing runtime test overrides.
   return all.filter(isFeatureEnabled)

@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils"
 import { GatewayHealthDashboard } from "@/components/gateway-health-dashboard"
 import { QrScannerModal } from "@/components/qr-scanner-modal"
 import type { ParsedQrPayload } from "@/lib/qr-code"
+import { recordMobileDeepLinkReturn } from "@/lib/walletconnect-resilience"
 import {
   buildClassicTrustlineTransactionXdr,
   classicLiqAssetConfigFromPublicEnv,
@@ -1320,6 +1321,7 @@ export function FusionChamber() {
       setFreighterTransferBusy(true)
       try {
         const txEnvelope = await buildTransferPhaseNftTransaction(g, toRaw, tid)
+        recordMobileDeepLinkReturn()
         const signResult = await signTransaction(txEnvelope, {
           networkPassphrase: NETWORK_PASSPHRASE,
           address: g,
