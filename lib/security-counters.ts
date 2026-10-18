@@ -45,7 +45,12 @@ export type SecurityCounterName =
   | "ve_fee_distributed"
   | "ve_fee_claimed"
   | "gauge_vote_cast"
-  | "gauge_epoch_distributed";
+  | "gauge_epoch_distributed"
+  | "qr_generated_receive"
+  | "qr_generated_referral"
+  | "qr_scanned_success"
+  | "qr_scanned_invalid"
+  | "qr_camera_denied";
 
 const counters = new Map<SecurityCounterName, number>()
 
@@ -68,6 +73,8 @@ export const MODERATION_DECISIONS = ["auto_allow", "human_review", "auto_hold"] 
 export function incSecurityCounter(name: SecurityCounterName, by = 1): void {
   counters.set(name, (counters.get(name) ?? 0) + by)
 }
+
+export const recordSecurityCounter = incSecurityCounter
 
 export function getSecurityCounter(name: SecurityCounterName): number {
   return counters.get(name) ?? 0

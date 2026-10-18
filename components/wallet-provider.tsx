@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 "use client"
 
 import {
@@ -26,6 +26,7 @@ import {
   TESTNET_PASSPHRASE,
 } from "@/lib/stellar-wallet-kit"
 import { cn } from "@/lib/utils"
+import { QrCodeDialog } from "@/components/qr-code-dialog"
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Types
@@ -52,6 +53,7 @@ type WalletContextValue = {
   openWalletPicker: () => Promise<string | null>
   refreshArtistAlias: () => Promise<string | null>
   saveArtistAlias: (alias: string) => Promise<{ ok: true } | { ok: false; error: string }>
+  openQrReceive: () => void
 }
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -91,6 +93,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [aliasLoading, setAliasLoading] = useState(false)
   const [isHardwareWallet, setIsHardwareWallet] = useState(false)
   const [isWalletConnect, setIsWalletConnect] = useState(false)
+  const [qrReceiveOpen, setQrReceiveOpen] = useState(false)
 
   /** True when user deliberately disconnected â€” blocks session restoration. */
   const userDisconnectedRef = useRef(false)
@@ -562,6 +565,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       openWalletPicker,
       refreshArtistAlias,
       saveArtistAlias,
+      openQrReceive: () => setQrReceiveOpen(true),
     }),
     [
       address,
@@ -663,6 +667,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             </div>
           </div>
         </div>
+      )}
+
+      {address && (
+        <QrCodeDialog
+          open={qrReceiveOpen}
+          onOpenChange={setQrReceiveOpen}
+          mode="receive"
+          address={address}
+        />
       )}
     </>
   )

@@ -58,6 +58,7 @@
  *   mainnet cutover acknowledgement (spike 640 / issue #502)
  * - phase-164: self-attested age bands with 18+/21+ campaign gating (spike 637 / issue #499)
  * - phase-165: signed creator licensing attestation on world creation (spike 639 / issue #501)
+ * - phase-166: QR code flows for receive, offer-claim and referral share with camera scan (spike 622 / issue #485)
  */
 
 export type PhaseFeatureFlag =
@@ -128,7 +129,8 @@ export type PhaseFeatureFlag =
   | "phase-162"
   | "phase-163"
   | "phase-164"
-  | "phase-165";
+  | "phase-165"
+  | "phase-166";
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-66": ["NEXT_PUBLIC_FEATURE_PHASE_66", "FEATURE_PHASE_66"],
@@ -198,6 +200,7 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-163": ["NEXT_PUBLIC_FEATURE_PHASE_163", "FEATURE_PHASE_163"],
   "phase-164": ["NEXT_PUBLIC_FEATURE_PHASE_164", "FEATURE_PHASE_164"],
   "phase-165": ["NEXT_PUBLIC_FEATURE_PHASE_165", "FEATURE_PHASE_165"],
+  "phase-166": ["NEXT_PUBLIC_FEATURE_PHASE_166", "FEATURE_PHASE_166"],
 };
 
 function isTruthy(v: string | undefined): boolean {
@@ -300,6 +303,7 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-163",
     "phase-164",
     "phase-165",
+    "phase-166",
   ];
   // Filtering is evaluated at call time, allowing runtime test overrides.
   return all.filter(isFeatureEnabled)

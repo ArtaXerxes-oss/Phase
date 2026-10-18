@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 "use client"
 
 import { albedoImplicitTxAllowed, isAlbedoSelectedInKit } from "@/lib/albedo-intent-client"
@@ -20,6 +20,8 @@ import { humanizePhaseHostErrorMessage } from "@/lib/phase-host-error"
 import { pickCopy } from "@/lib/phase-copy"
 import { cn } from "@/lib/utils"
 import { GatewayHealthDashboard } from "@/components/gateway-health-dashboard"
+import { QrScannerModal } from "@/components/qr-scanner-modal"
+import type { ParsedQrPayload } from "@/lib/qr-code"
 import {
   buildClassicTrustlineTransactionXdr,
   classicLiqAssetConfigFromPublicEnv,
@@ -172,6 +174,7 @@ export function FusionChamber() {
   const [freighterIndexPingBusy, setFreighterIndexPingBusy] = useState(false)
   const [freighterTransferBusy, setFreighterTransferBusy] = useState(false)
   const [freighterTransferTo, setFreighterTransferTo] = useState("")
+  const [recipientScanOpen, setRecipientScanOpen] = useState(false)
   const [freighterSep50Busy, setFreighterSep50Busy] = useState(false)
   const [freighterSep50Report, setFreighterSep50Report] = useState<string | null>(null)
   const [collectionSupply, setCollectionSupply] = useState<{ minted: number; cap: number } | null>(null)
@@ -2633,6 +2636,20 @@ export function FusionChamber() {
           </div>
         </>
       ) : null}
+
+      <QrScannerModal
+        open={recipientScanOpen}
+        onOpenChange={setRecipientScanOpen}
+        title="◈ SCAN RECIPIENT STELLAR ADDRESS"
+        onScan={(result: ParsedQrPayload) => {
+          if (result.type === "stellar_address" || result.type === "stellar_pay_uri") {
+            setFreighterTransferTo(result.address)
+            void runNftTransferToRecipient(result.address)
+          } else if (result.type === "raw" && result.text) {
+            setFreighterTransferTo(result.text)
+          }
+        }}
+      />
     </div>
   )
 }

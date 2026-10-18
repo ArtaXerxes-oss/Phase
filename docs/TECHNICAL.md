@@ -653,3 +653,14 @@ Flags: `phase-162` (SEP-10), `phase-163` (network), `phase-164` (age gate), `pha
 Sidecars (`.data/`, or `PHASE_SERVER_DATA_DIR`): `auth-sessions.json` (SHA-256 of session tokens and consumed challenge hashes only), `age-declarations.json` (bands only, no birth years), `license-attestations.json` (one per collection, nonce-unique).
 
 Known gaps: header-based routes (`acting_wallet`, `X-Wallet-Address`) are not yet migrated to sessions; sidecar writes are unlocked (single-instance only, same as other sidecars); viewer/claim-side age gating and mainnet seeding are not implemented.
+
+## 16. QR code flows and camera transport (spike 622)
+
+Flag: `phase-166` (`NEXT_PUBLIC_FEATURE_PHASE_166` / `FEATURE_PHASE_166`). Default off. See `PROJECT_ARCHITECTURE.md` §10.
+
+- `lib/qr-code.ts`: Model 2 Version 2 pure SVG QR code generator, data URL formatter, SEP-0007 / referral parser, camera diagnostics with `diagnoseCameraError`.
+- `next.config.mjs`: `Permissions-Policy: camera=(self), microphone=(), geolocation=()` to allow video frame capture on the same origin.
+- Components: `components/qr-code-dialog.tsx` for generating and displaying styled QR codes with optional amount requests, `components/qr-scanner-modal.tsx` with camera viewfinder reticle and manual input fallback.
+- Routes: `GET /api/qr/encode` for server-side SVG generation.
+- Audit counters: `qr_generated_receive`, `qr_generated_referral`, `qr_scanned_success`, `qr_scanned_invalid`, `qr_camera_denied` in `lib/security-counters.ts`.
+

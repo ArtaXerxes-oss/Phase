@@ -43,6 +43,7 @@ const FILES = {
   authSessions: "auth-sessions.json",
   ageDeclarations: "age-declarations.json",
   licenseAttestations: "license-attestations.json",
+  qrAudit: "qr-audit.json",
 } as const
 
 export type ServerDataFile = keyof typeof FILES
