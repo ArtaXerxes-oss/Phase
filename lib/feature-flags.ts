@@ -65,6 +65,7 @@
  * - phase-170: Albedo full retirement-or-parity plan with flagged sunset (spike 626 / issue #489)
  * - phase-171: Freighter mobile browser support with in-app UA, injection and return flow (spike 627 / issue #490)
  * - phase-172: biometric unlock for returning wallets with OS-gated session (spike 628 / issue #491)
+ * - phase-173: Horizon-backed per-wallet transaction history timeline (spike 629 / issue #492)
  */
 
 export type PhaseFeatureFlag =
@@ -142,7 +143,8 @@ export type PhaseFeatureFlag =
   | "phase-169"
   | "phase-170"
   | "phase-171"
-  | "phase-172";
+  | "phase-172"
+  | "phase-173";
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-66": ["NEXT_PUBLIC_FEATURE_PHASE_66", "FEATURE_PHASE_66"],
@@ -219,6 +221,7 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-170": ["NEXT_PUBLIC_FEATURE_PHASE_170", "FEATURE_PHASE_170"],
   "phase-171": ["NEXT_PUBLIC_FEATURE_PHASE_171", "FEATURE_PHASE_171"],
   "phase-172": ["NEXT_PUBLIC_FEATURE_PHASE_172", "FEATURE_PHASE_172"],
+  "phase-173": ["NEXT_PUBLIC_FEATURE_PHASE_173", "FEATURE_PHASE_173"],
 };
 
 function isTruthy(v: string | undefined): boolean {
@@ -328,6 +331,7 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-170",
     "phase-171",
     "phase-172",
+    "phase-173",
   ];
   // Filtering is evaluated at call time, allowing runtime test overrides.
   return all.filter(isFeatureEnabled)

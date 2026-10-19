@@ -732,6 +732,18 @@ Enforcement surfaces:
 
 Sidecar: `legal-holds.json` in `.data/` or `PHASE_SERVER_DATA_DIR`.
 
+## 23. Horizon Per-Wallet Transaction History Timeline (Spike 629 / Issue #492)
+
+Flag: `phase-173` (`NEXT_PUBLIC_FEATURE_PHASE_173` / `FEATURE_PHASE_173`), default off. Rollback: unset var, restart.
+
+| Endpoint | Method | Scope | Contract |
+|---|---|---|---|
+| `/api/history` | GET | wallet query | Returns a per-wallet timeline page: `address` (validated G… base32), `events[]` (typed `TimelineEvent` with kind/direction/amount/asset/counterparty/tx_hash/ledger/memo/correlation), `next_cursor` (smaller of both Horizon stream tails — gap-free), `cache` (`off` \| `miss` \| `fresh` \| `stale`), `indexed_at`. Params: `address` (required), `cursor`, `limit` (1–200, default 50). |
+
+Horizon reads (`transactions?account=` + `effects?account=`) run through `withHorizonBulkhead` with an 8s timeout; effects are the primary stream and transaction rows are merged in only where no effect covers the same hash (failed transactions preserved). settle ↔ forge correlation joins tx hashes against `settlement-store` and `generation-job-store` (lazy imports) producing `correlation: {kind: settle|forge-settle, settled, forge_job_id, forge_job_status, collection_id}`. The in-memory cache (300 entries, 30s TTL, key `wallet:cursor`) serves fresh pages and degrades to stale-on-error. Errors: `400` invalid address/limit, `404` flag off, `502` Horizon failure, `503` Horizon 429.
+
+Sidecars: none (in-memory cache only). UI: `components/wallet-history-timeline.tsx` on the dashboard PHASE_VAULT tab.
+
 
 
 
