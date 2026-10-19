@@ -46,6 +46,10 @@ const FILES = {
   qrAudit: "qr-audit.json",
   walletSessions: "wallet-sessions.json",
   ledgerAudit: "ledger-audit.json",
+  experimentAssignments: "experiment-assignments.json",
+  searchQueryLog: "search-query-log.json",
+  costBudgets: "cost-budgets.json",
+  forgeBilling: "forge-billing.json",
 } as const
 
 

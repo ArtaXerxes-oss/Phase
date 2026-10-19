@@ -225,6 +225,28 @@ export default function ForgePage() {
 
   const { address, connect, disconnect, connecting, refresh, isHardwareWallet, requestLedgerReview } = useWallet()
 
+  // Spike 612 (phase-174): variant hint shown while the 402 gate is open. The
+  // challenge amount itself is resolved server-side; this is display copy only.
+  const [expGateHint, setExpGateHint] = useState<string | null>(null)
+  useEffect(() => {
+    if (!isFeatureEnabled("phase-174")) return
+    let cancelled = false
+    const params = new URLSearchParams({ lang })
+    if (address) params.set("wallet", address)
+    void fetch(`/api/experiments/forge?${params.toString()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const hint = data?.copy?.paymentGateHint
+        if (!cancelled && typeof hint === "string" && data?.variantId !== "control") {
+          setExpGateHint(hint)
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [address, lang])
+
 
   const [name, setName] = useState("")
   const [priceLiq, setPriceLiq] = useState("1")
@@ -1071,7 +1093,7 @@ export default function ForgePage() {
         : agentState === "FORGING_MATTER"
           ? forgingTerminalLines[agentTickerIdx % forgingTerminalLines.length]
           : agentState === "AWAITING_PAYMENT"
-            ? f.forgeCtaGenerateContacting
+            ? expGateHint ?? f.forgeCtaGenerateContacting
             : ""
 
   const initiatePrimaryLabel =

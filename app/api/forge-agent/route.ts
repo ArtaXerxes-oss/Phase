@@ -8,11 +8,18 @@ import {
   extractSettlementReceiptTxHash,
   buildLegacyChallenge,
   forgePriceDisplay,
+  resolveForgePaymentAmount,
   X402_NETWORK,
 } from "@/lib/forge/payment-verifier"
 import { runForgePipeline } from "@/lib/forge/pipeline"
-import { tokenContractIdForServer, REQUIRED_AMOUNT } from "@/lib/phase-protocol"
+import { tokenContractIdForServer } from "@/lib/phase-protocol"
 import { isSettlementUsed, markSettlementUsedIfUnused } from "@/lib/settlement-store"
+import {
+  checkForgeQuota,
+  recordForgeBillingEvent,
+  forgeBillingRetryAfterSeconds,
+} from "@/lib/forge/billing"
+import { chargeSurfaceCost, isSurfaceHalted } from "@/lib/cost-budgets"
 import {
   nanobananaApiKeyConfigured,
   nanobananaAsyncWebhookEnabled,
@@ -29,15 +36,19 @@ export const dynamic = "force-dynamic"
 const PHASE_LIQ_TOKEN_CONTRACT = tokenContractIdForServer()
 const ERR_SETTLEMENT_REJECTED = "[ ERROR: SETTLEMENT_REJECTED_BY_FACILITATOR ]"
 
-function paymentRequiredResponse(request: NextRequest) {
+async function paymentRequiredResponse(request: NextRequest, payerAddress?: string) {
   const origin = request.nextUrl.origin
-  const challenge = buildLegacyChallenge(origin, request.nextUrl.pathname)
-  const paymentRequirements = buildOfficialPaymentRequirements(origin)
+  // Spike 612: challenge amount follows the payer's price variant (control when
+  // flag off / no payer / holdout). One resolved amount feeds challenge, header
+  // and verifier so the three can never diverge.
+  const amountStroops = await resolveForgePaymentAmount(payerAddress)
+  const challenge = buildLegacyChallenge(origin, request.nextUrl.pathname, amountStroops)
+  const paymentRequirements = buildOfficialPaymentRequirements(origin, amountStroops)
   const b64 = Buffer.from(JSON.stringify(challenge)).toString("base64")
   const body: Record<string, unknown> = {
     success: false,
     error: "Payment Required",
-    priceDisplay: forgePriceDisplay(),
+    priceDisplay: forgePriceDisplay(amountStroops),
     message:
       "Se requiere pago en PHASELQ. Tras confirmar on-chain, reintenta con Authorization o settlementTxHash.",
     challenge,
@@ -47,7 +58,7 @@ function paymentRequiredResponse(request: NextRequest) {
     status: 402,
     headers: {
       "WWW-Authenticate": `x402 token="${b64}", amount="${challenge.amount}", facilitator="${challenge.facilitator}", network="${X402_NETWORK}"`,
-      "X-Required-Amount": REQUIRED_AMOUNT,
+      "X-Required-Amount": amountStroops,
       "X-Token-Address": PHASE_LIQ_TOKEN_CONTRACT,
       "X-Facilitator": challenge.facilitator,
       "X-X402-Network": X402_NETWORK,
@@ -82,7 +93,9 @@ export async function POST(request: NextRequest) {
   }
   warnPhaserLiqSacMismatchOnce(PHASE_LIQ_TOKEN_CONTRACT, "forge-agent")
 
-  const paymentRequirements = buildOfficialPaymentRequirements(request.nextUrl.origin)
+  const payerForPricing = body.payerAddress?.trim()
+  const requiredAmountStroops = await resolveForgePaymentAmount(payerForPricing)
+  const paymentRequirements = buildOfficialPaymentRequirements(request.nextUrl.origin, requiredAmountStroops)
   const auth = request.headers.get("authorization")
   const receipt = extractSettlementReceiptTxHash(auth, body)
 
@@ -93,7 +106,7 @@ export async function POST(request: NextRequest) {
       { status: 403, headers: { "x-correlation-id": correlationId } },
     )
   }
-  if (resolution === "missing") return paymentRequiredResponse(request)
+  if (resolution === "missing") return paymentRequiredResponse(request, payerForPricing)
 
   if (receipt) {
     if (await isSettlementUsed(receipt)) {
@@ -119,6 +132,42 @@ export async function POST(request: NextRequest) {
   }
 
   const txHash = receipt ?? body.settlementTxHash?.trim() ?? ""
+
+  // Spike 614 (phase-176): budget kill-switch — a halted surface refuses new
+  // work with 503 + Retry-After before any spend happens.
+  if (isSurfaceHalted("forge")) {
+    return NextResponse.json(
+      { success: false, error: "FORGE_SURFACE_HALTED", retryAfterSeconds: 300 },
+      { status: 503, headers: { "x-correlation-id": correlationId, "Retry-After": "300" } },
+    )
+  }
+
+  // Spike 615 (phase-177): paid-tier quota gate. Enforced after settlement
+  // verification so a quota-exhausted wallet cannot double-spend a settlement
+  // into a job; the settlement idempotency store above still fences replays.
+  const quotaPayer = payerForPricing ?? body.payerAddress?.trim()
+  if (quotaPayer) {
+    const quota = await checkForgeQuota(quotaPayer)
+    if (!quota.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "FORGE_QUOTA_EXCEEDED",
+          tierId: quota.tierId,
+          usedToday: quota.used,
+          dailyLimit: quota.limit,
+          resetAt: quota.resetAt,
+        },
+        {
+          status: 429,
+          headers: {
+            "x-correlation-id": correlationId,
+            "Retry-After": String(forgeBillingRetryAfterSeconds(quota)),
+          },
+        },
+      )
+    }
+  }
 
   // ── Async mode: NanoBanana webhook enabled ──────────────────────────────────
   // When NANOBANANA_WEBHOOK_SECRET + NANOBANANA_CALLBACK_URL are both set,
@@ -151,6 +200,18 @@ export async function POST(request: NextRequest) {
         collectionId: body.collection_id,
         lang: body.lang,
       })
+
+      // Spike 615/614: meter the accepted job (idempotent by jobId) and book
+      // the surface cost against the forge budget.
+      if (quotaPayer) {
+        await recordForgeBillingEvent({
+          wallet: quotaPayer,
+          jobId: job.id,
+          settlementTxHash: txHash,
+          amountStroops: requiredAmountStroops,
+        }).catch(() => undefined)
+      }
+      void chargeSurfaceCost("forge", 20, { requestId: correlationId }).catch(() => undefined)
 
       // Start lore generation in the background while image is being generated
       // (lore is independent of image and typically finishes in 3–10s)
@@ -197,6 +258,15 @@ export async function POST(request: NextRequest) {
       { ...body, prompt: body.prompt as string },
       correlationId,
     )
+    if (quotaPayer) {
+      await recordForgeBillingEvent({
+        wallet: quotaPayer,
+        jobId: result.jobId,
+        settlementTxHash: txHash,
+        amountStroops: requiredAmountStroops,
+      }).catch(() => undefined)
+    }
+    void chargeSurfaceCost("forge", 20, { requestId: correlationId }).catch(() => undefined)
     return NextResponse.json(result, { headers: { "x-correlation-id": correlationId } })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

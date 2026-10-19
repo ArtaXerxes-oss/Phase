@@ -62,6 +62,14 @@
  * - phase-167: WalletConnect v2 mobile session resilience with reconnect and chain-switch (spike 623 / issue #486)
  * - phase-168: xBull full support with sign, trustline and Freighter-difference matrix (spike 624 / issue #487)
  * - phase-169: Ledger blind-signing to clear-signing review for Soroban transactions (spike 625 / issue #488)
+ * - phase-174: A/B experimentation framework for forge and chamber copy plus
+ *   pricing with sticky salted bucketing (spike 612 / issue #475)
+ * - phase-175: Search analytics — hashed query logs, zero-result rate,
+ *   clickthrough and typo effectiveness (spike 613 / issue #476)
+ * - phase-176: Cost accounting per surface with budgets, burn-rate alerts and
+ *   kill-switches (spike 614 / issue #477)
+ * - phase-177: Billing and metering for paid forge tiers with quota
+ *   enforcement (spike 615 / issue #478)
  */
 
 export type PhaseFeatureFlag =
@@ -137,7 +145,11 @@ export type PhaseFeatureFlag =
   | "phase-166"
   | "phase-167"
   | "phase-168"
-  | "phase-169";
+  | "phase-169"
+  | "phase-174"
+  | "phase-175"
+  | "phase-176"
+  | "phase-177";
 
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
@@ -212,6 +224,10 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-167": ["NEXT_PUBLIC_FEATURE_PHASE_167", "FEATURE_PHASE_167"],
   "phase-168": ["NEXT_PUBLIC_FEATURE_PHASE_168", "FEATURE_PHASE_168"],
   "phase-169": ["NEXT_PUBLIC_FEATURE_PHASE_169", "FEATURE_PHASE_169"],
+  "phase-174": ["NEXT_PUBLIC_FEATURE_PHASE_174", "FEATURE_PHASE_174"],
+  "phase-175": ["NEXT_PUBLIC_FEATURE_PHASE_175", "FEATURE_PHASE_175"],
+  "phase-176": ["NEXT_PUBLIC_FEATURE_PHASE_176", "FEATURE_PHASE_176"],
+  "phase-177": ["NEXT_PUBLIC_FEATURE_PHASE_177", "FEATURE_PHASE_177"],
 };
 
 
@@ -319,6 +335,10 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-167",
     "phase-168",
     "phase-169",
+    "phase-174",
+    "phase-175",
+    "phase-176",
+    "phase-177",
   ];
 
   // Filtering is evaluated at call time, allowing runtime test overrides.
