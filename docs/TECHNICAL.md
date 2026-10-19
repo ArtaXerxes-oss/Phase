@@ -699,6 +699,30 @@ Flag: `phase-169` (`NEXT_PUBLIC_FEATURE_PHASE_169` / `FEATURE_PHASE_169`), defau
 | `/api/legal-hold` | POST | admin key | Creates and places a legal hold with custodian credentials, matter identifier, reason, optional retention clock (`retention_days`), and optional `immutable_worm` flag. Returns `201 Created`. |
 | `/api/legal-hold/[id]/release` | POST | admin key | Releases an active legal hold. If `immutable_worm` is enabled, releases prior to retention clock expiration return `423 Locked`. |
 
+## 20. Albedo Retirement-or-Parity Sunset (Spike 626 / Issue #489)
+
+Flag: `phase-170` (`NEXT_PUBLIC_FEATURE_PHASE_170` / `FEATURE_PHASE_170`), default off. Rollback: unset var, restart.
+
+| Endpoint | Method | Scope | Contract |
+|---|---|---|---|
+| `/api/albedo/status` | GET | public | Returns the sunset program status: `enabled`, `mode` (`parity-freeze` \| `retired`), pinned `@albedo-link/intent` version (`0.12.0`), and the six-entry call-site migration registry (id, surface, file, replacement). |
+
+`ALBEDO_SUNSET_MODE` (server + client env) selects `parity-freeze` (default; `full` is an alias) or `retired`. Under parity-freeze, new Albedo call-site registration and intent-version drift are rejected (`CALL_SITE_FROZEN` / `PARITY_VERSION_DRIFT`). Once retired, `getAlbedoIntent()` throws before loading the intent bundle, the implicit popup flow short-circuits with bilingual migration copy, and `signTransaction` fails closed for Albedo sessions directing users to Freighter / Ledger / WalletConnect. The legacy implicit-tx banner is replaced by `components/albedo-sunset-banner.tsx`.
+
+## 21. Freighter Mobile Browser Support (Spike 627 / Issue #490)
+
+Flag: `phase-171` (`NEXT_PUBLIC_FEATURE_PHASE_171` / `FEATURE_PHASE_171`), default off. Rollback: unset var, restart.
+
+Client-side only — no new endpoints. `lib/freighter-mobile.ts` provides pure UA classification (`detectMobileEnvironment`), an injection-based support matrix (`freighterMobileSupport`: `in-app` | `extension` | `walletconnect-required`), idempotent `viewport-fit=cover` + `theme-color` injection, visualViewport keyboard-inset math published as `--phase-keyboard-inset`, a mobile-safe friendbot strategy (`same-tab` via `location.assign`, desktop keeps `window.open`), and a TTL'd sessionStorage return-flow marker (`@Phase/freighter-return-flow`) so interrupted connect/sign flows resume after switching to the Freighter app. `components/freighter-mobile-notice.tsx` (mounted under `FreighterConnect`) renders the WalletConnect / in-app-browser guidance on plain mobile browsers only.
+
+## 22. Biometric Unlock with OS-Gated Session (Spike 628 / Issue #491)
+
+Flag: `phase-172` (`NEXT_PUBLIC_FEATURE_PHASE_172` / `FEATURE_PHASE_172`), default off. Rollback: unset var, restart.
+
+Client-side only — no new endpoints, no contract change (off-chain, opposite layer from spike 555). `lib/biometric-unlock.ts` seals the session payload into an AES-GCM envelope keyed by an HKDF-derived, non-extractable key from a WebAuthn platform-authenticator assertion over a wallet-bound challenge (`phase-biometric-unlock-v1:<wallet>`). Storage: `@Phase/biometric-session-envelope` (ciphertext only, 7-day TTL) and `@Phase/biometric-lock-meta` (attempt counts only — no PII; 5 failures → 5-minute cooldown, user cancels do not consume attempts). `WalletProvider` gates every restore path (mount, focus, kit `STATE_UPDATED`) behind `requiresBiometricGate()`, mounting `components/wallet-lock-screen.tsx` (via `hooks/useBiometricUnlock.ts`); explicit connect seals, explicit disconnect forgets, and "Reconnect wallet" clears the envelope to fall back to the legacy flow. Corrupt, stale, and cross-wallet envelopes fail closed.
+
+Sidecars: none (localStorage ciphertext only).
+
 Enforcement surfaces:
 - `takedownSignal` & `restoreSignal` (`lib/signal-store.ts`)
 - `POST /api/signals/[id]/moderate`
@@ -707,6 +731,18 @@ Enforcement surfaces:
 - `markRead` & `markAllRead` (`lib/notification-store.ts`)
 
 Sidecar: `legal-holds.json` in `.data/` or `PHASE_SERVER_DATA_DIR`.
+
+## 23. Horizon Per-Wallet Transaction History Timeline (Spike 629 / Issue #492)
+
+Flag: `phase-173` (`NEXT_PUBLIC_FEATURE_PHASE_173` / `FEATURE_PHASE_173`), default off. Rollback: unset var, restart.
+
+| Endpoint | Method | Scope | Contract |
+|---|---|---|---|
+| `/api/history` | GET | wallet query | Returns a per-wallet timeline page: `address` (validated G… base32), `events[]` (typed `TimelineEvent` with kind/direction/amount/asset/counterparty/tx_hash/ledger/memo/correlation), `next_cursor` (smaller of both Horizon stream tails — gap-free), `cache` (`off` \| `miss` \| `fresh` \| `stale`), `indexed_at`. Params: `address` (required), `cursor`, `limit` (1–200, default 50). |
+
+Horizon reads (`transactions?account=` + `effects?account=`) run through `withHorizonBulkhead` with an 8s timeout; effects are the primary stream and transaction rows are merged in only where no effect covers the same hash (failed transactions preserved). settle ↔ forge correlation joins tx hashes against `settlement-store` and `generation-job-store` (lazy imports) producing `correlation: {kind: settle|forge-settle, settled, forge_job_id, forge_job_status, collection_id}`. The in-memory cache (300 entries, 30s TTL, key `wallet:cursor`) serves fresh pages and degrades to stale-on-error. Errors: `400` invalid address/limit, `404` flag off, `502` Horizon failure, `503` Horizon 429.
+
+Sidecars: none (in-memory cache only). UI: `components/wallet-history-timeline.tsx` on the dashboard PHASE_VAULT tab.
 
 
 

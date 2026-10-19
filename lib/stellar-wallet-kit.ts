@@ -15,6 +15,7 @@ import {
   WALLET_CONNECT_ID,
 } from "@creit.tech/stellar-wallets-kit/modules/wallet-connect"
 import { albedoImplicitTxAllowed, isAlbedoSelectedInKit } from "@/lib/albedo-intent-client"
+import { albedoRetiredSignMessage, isAlbedoRetired } from "@/lib/albedo-sunset"
 import { randomUUID } from "node:crypto"
 
 let initialized = false
@@ -170,6 +171,17 @@ export async function signTransaction(
     // Warn if the app is currently operating on testnet but receiving a mainnet passphrase
     if (opts.networkPassphrase === MAINNET_PASSPHRASE) {
       console.warn("[PHASE] Ledger: signing a MAINNET transaction — ensure your Ledger Stellar app is in mainnet mode.")
+    }
+  }
+
+  // ── Albedo sunset guard (spike 626) ───────────────────────────────────────
+  // Retired: fail closed with migration copy instead of demanding the popup
+  // permission that the sunset removed.
+  if (typeof window !== "undefined" && opts.address && isAlbedoSelectedInKit() && isAlbedoRetired()) {
+    return {
+      error: {
+        message: albedoRetiredSignMessage(),
+      },
     }
   }
 
