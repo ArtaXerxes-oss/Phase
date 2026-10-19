@@ -22,6 +22,14 @@ import {
   isFreighterMobile171Enabled,
 } from "@/lib/freighter-mobile"
 import {
+  clearBiometricSession,
+  isBiometric172Enabled,
+  requiresBiometricGate,
+  sealBiometricSession,
+} from "@/lib/biometric-unlock"
+import { getSelectedStellarKitModuleId } from "@/lib/albedo-intent-client"
+import { WalletLockScreen } from "@/components/wallet-lock-screen"
+import {
   initStellarWalletKit,
   isHardwareWalletSelected,
   isWalletConnectSelected,
@@ -99,6 +107,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /** True when user deliberately disconnected â€” blocks session restoration. */
   const userDisconnectedRef = useRef(false)
+  /** Spike 628: true once the biometric gate passed (or was skipped) this session. */
+  const biometricUnlockedRef = useRef(false)
+  /** Spike 628: tap-to-unlock middle state — auto-restore held behind the lock screen. */
+  const [biometricLocked, setBiometricLocked] = useState(false)
   const autoFundedWalletsRef = useRef<Set<string>>(new Set())
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -117,6 +129,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const syncModuleFlags = useCallback(() => {
     setIsHardwareWallet(isHardwareWalletSelected())
     setIsWalletConnect(isWalletConnectSelected())
+  }, [])
+
+  /**
+   * Spike 628: when a sealed biometric envelope exists, auto-restored
+   * addresses are held behind the lock screen instead of applied. Returns
+   * true when the caller must NOT continue with the restored address.
+   */
+  const gateBiometric = useCallback((addr: string | null): boolean => {
+    if (!addr || userDisconnectedRef.current) return false
+    if (biometricUnlockedRef.current) return false
+    if (isBiometric172Enabled() && requiresBiometricGate()) {
+      setBiometricLocked(true)
+      return true
+    }
+    return false
   }, [])
 
   const syncAlbedoTxPrep = useCallback(async (addr: string | null) => {
@@ -258,13 +285,39 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   // â”€â”€ effects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+  /** Spike 628: OS biometric passed — apply the sealed session. */
+  const handleBiometricUnlocked = useCallback(
+    (payload: { address: string }) => {
+      biometricUnlockedRef.current = true
+      setBiometricLocked(false)
+      setAddress(payload.address)
+      setHint(null)
+      startHeartbeat(payload.address)
+      queueMicrotask(() => void syncAlbedoTxPrep(payload.address))
+    },
+    [startHeartbeat, syncAlbedoTxPrep],
+  )
+
+  /** Spike 628: user chose the legacy full-reconnect path — drop the envelope. */
+  const handleBiometricSkip = useCallback(() => {
+    clearBiometricSession()
+    biometricUnlockedRef.current = true
+    setBiometricLocked(false)
+    void refresh()
+      .then((addr) => {
+        if (addr) startHeartbeat(addr)
+      })
+      .catch(() => {})
+  }, [refresh, startHeartbeat])
+
   /** Initial session restoration on mount. */
   useEffect(() => {
     syncModuleFlags()
     void refresh().then((addr) => {
+      if (gateBiometric(addr)) return
       if (addr) startHeartbeat(addr)
     }).catch(() => {})
-  }, [refresh, startHeartbeat, syncModuleFlags])
+  }, [refresh, startHeartbeat, syncModuleFlags, gateBiometric])
 
   /** Re-check session when the tab regains focus (catches page navigations). */
   useEffect(() => {
@@ -280,12 +333,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
       void refresh().then((addr) => {
+        if (gateBiometric(addr)) return
         if (addr && !heartbeatTimerRef.current) startHeartbeat(addr)
       }).catch(() => {})
     }
     window.addEventListener("focus", onFocus)
     return () => window.removeEventListener("focus", onFocus)
-  }, [refresh, startHeartbeat])
+  }, [refresh, startHeartbeat, gateBiometric])
 
   /** Stop polling when the provider unmounts. */
   useEffect(() => stopHeartbeat, [stopHeartbeat])
@@ -297,6 +351,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       try {
         if (userDisconnectedRef.current) return
         const addr = payload.address ?? null
+        // Spike 628: kit-side restore also passes through the biometric gate.
+        if (gateBiometric(addr)) {
+          stopHeartbeat()
+          return
+        }
         setAddress(addr)
         if (addr) startHeartbeat(addr)
         else stopHeartbeat()
@@ -306,7 +365,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     })
     return stop
-  }, [startHeartbeat, stopHeartbeat])
+  }, [startHeartbeat, stopHeartbeat, gateBiometric])
 
   /**
    * HID device disconnect events â€” WebUSB fires `connect`/`disconnect` events
@@ -497,6 +556,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (!userDisconnectedRef.current) {
           setAddress(next)
           startHeartbeat(next)
+          // Spike 628: a fresh connect is an unlocked session — seal it behind
+          // the OS biometric so the next visit gates at the lock screen.
+          biometricUnlockedRef.current = true
+          setBiometricLocked(false)
+          if (isBiometric172Enabled()) {
+            queueMicrotask(() =>
+              void sealBiometricSession({
+                address: next,
+                module_id: getSelectedStellarKitModuleId(),
+                created_at: Date.now(),
+              }),
+            )
+          }
           queueMicrotask(() => void syncAlbedoTxPrep(next))
           queueMicrotask(() => void validateHardwareNetwork())
         }
@@ -539,6 +611,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setAddress(g)
         setHint(null)
         startHeartbeat(g)
+        // Spike 628: explicit wallet selection = unlocked session (seal for next visit).
+        biometricUnlockedRef.current = true
+        setBiometricLocked(false)
+        if (isBiometric172Enabled()) {
+          queueMicrotask(() =>
+            void sealBiometricSession({
+              address: g,
+              module_id: getSelectedStellarKitModuleId(),
+              created_at: Date.now(),
+            }),
+          )
+        }
         queueMicrotask(() => void syncAlbedoTxPrep(g))
         queueMicrotask(() => void validateHardwareNetwork())
         return g
@@ -554,6 +638,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const disconnect = useCallback(() => {
     userDisconnectedRef.current = true
+    // Spike 628: an explicit disconnect forgets the sealed session entirely.
+    biometricUnlockedRef.current = false
+    setBiometricLocked(false)
+    clearBiometricSession()
     stopHeartbeat()
     void kit.disconnect().catch(() => {})
     setAddress(null)
@@ -606,6 +694,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   return (
     <>
       <WalletContext.Provider value={value}>{children}</WalletContext.Provider>
+
+      {/* Spike 628: tap-to-unlock middle state — sealed session held behind OS biometric. */}
+      {biometricLocked ? (
+        <WalletLockScreen onUnlocked={handleBiometricUnlocked} onSkip={handleBiometricSkip} />
+      ) : null}
 
       {/* â”€â”€ Network passphrase mismatch alert (Ledger on wrong network) â”€â”€â”€â”€ */}
       {networkMismatch && address && isHardwareWallet && (

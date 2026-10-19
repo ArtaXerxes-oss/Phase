@@ -715,6 +715,14 @@ Flag: `phase-171` (`NEXT_PUBLIC_FEATURE_PHASE_171` / `FEATURE_PHASE_171`), defau
 
 Client-side only — no new endpoints. `lib/freighter-mobile.ts` provides pure UA classification (`detectMobileEnvironment`), an injection-based support matrix (`freighterMobileSupport`: `in-app` | `extension` | `walletconnect-required`), idempotent `viewport-fit=cover` + `theme-color` injection, visualViewport keyboard-inset math published as `--phase-keyboard-inset`, a mobile-safe friendbot strategy (`same-tab` via `location.assign`, desktop keeps `window.open`), and a TTL'd sessionStorage return-flow marker (`@Phase/freighter-return-flow`) so interrupted connect/sign flows resume after switching to the Freighter app. `components/freighter-mobile-notice.tsx` (mounted under `FreighterConnect`) renders the WalletConnect / in-app-browser guidance on plain mobile browsers only.
 
+## 22. Biometric Unlock with OS-Gated Session (Spike 628 / Issue #491)
+
+Flag: `phase-172` (`NEXT_PUBLIC_FEATURE_PHASE_172` / `FEATURE_PHASE_172`), default off. Rollback: unset var, restart.
+
+Client-side only — no new endpoints, no contract change (off-chain, opposite layer from spike 555). `lib/biometric-unlock.ts` seals the session payload into an AES-GCM envelope keyed by an HKDF-derived, non-extractable key from a WebAuthn platform-authenticator assertion over a wallet-bound challenge (`phase-biometric-unlock-v1:<wallet>`). Storage: `@Phase/biometric-session-envelope` (ciphertext only, 7-day TTL) and `@Phase/biometric-lock-meta` (attempt counts only — no PII; 5 failures → 5-minute cooldown, user cancels do not consume attempts). `WalletProvider` gates every restore path (mount, focus, kit `STATE_UPDATED`) behind `requiresBiometricGate()`, mounting `components/wallet-lock-screen.tsx` (via `hooks/useBiometricUnlock.ts`); explicit connect seals, explicit disconnect forgets, and "Reconnect wallet" clears the envelope to fall back to the legacy flow. Corrupt, stale, and cross-wallet envelopes fail closed.
+
+Sidecars: none (localStorage ciphertext only).
+
 Enforcement surfaces:
 - `takedownSignal` & `restoreSignal` (`lib/signal-store.ts`)
 - `POST /api/signals/[id]/moderate`
