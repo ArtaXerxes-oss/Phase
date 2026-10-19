@@ -18,6 +18,10 @@ import {
 } from "@/lib/albedo-intent-client"
 import { isAlbedoRetired } from "@/lib/albedo-sunset"
 import {
+  consumePendingReturnFlow,
+  isFreighterMobile171Enabled,
+} from "@/lib/freighter-mobile"
+import {
   initStellarWalletKit,
   isHardwareWalletSelected,
   isWalletConnectSelected,
@@ -265,6 +269,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   /** Re-check session when the tab regains focus (catches page navigations). */
   useEffect(() => {
     const onFocus = () => {
+      // Spike 627: surface an interrupted mobile connect flow when the user
+      // returns from the Freighter app (marker consumed exactly once, TTL'd).
+      if (isFreighterMobile171Enabled()) {
+        const pending = consumePendingReturnFlow()
+        if (pending?.kind === "connect") {
+          setHint(
+            "Conexión a Freighter interrumpida — volvé a conectar para retomar. / Freighter connection interrupted — reconnect to resume.",
+          )
+        }
+      }
       void refresh().then((addr) => {
         if (addr && !heartbeatTimerRef.current) startHeartbeat(addr)
       }).catch(() => {})
@@ -598,6 +612,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         <div
           role="alert"
           aria-live="assertive"
+          /* Spike 627: clear the soft keyboard (visualViewport inset published by lib/freighter-mobile). */
+          style={{ paddingBottom: "calc(0.75rem + var(--phase-keyboard-inset, 0px))" }}
           className={cn(
             "fixed bottom-0 left-0 right-0 z-[400] border-t border-red-500/50 bg-background/95 px-4 py-3 text-sm shadow-lg backdrop-blur-sm",
           )}
@@ -628,6 +644,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       {address && albedoTxPrep === "needed" && !networkMismatch && (
         <div
           role="status"
+          /* Spike 627: clear the soft keyboard (visualViewport inset published by lib/freighter-mobile). */
+          style={{ paddingBottom: "calc(0.75rem + var(--phase-keyboard-inset, 0px))" }}
           className={cn(
             "fixed bottom-0 left-0 right-0 z-[300] border-t border-cyan-500/40 bg-background/95 px-4 py-3 text-sm shadow-lg backdrop-blur-sm",
           )}

@@ -46,6 +46,8 @@ export function AlbedoSunsetBanner() {
   return (
     <div
       role="status"
+      /* Spike 627: fixed banners clear the soft keyboard via the visualViewport inset. */
+      style={{ paddingBottom: "calc(0.75rem + var(--phase-keyboard-inset, 0px))" }}
       className="pointer-events-auto fixed bottom-0 left-0 right-0 z-[290] border-t border-amber-500/40 bg-background/95 px-4 py-3 text-sm shadow-lg backdrop-blur-sm"
     >
       <div className="mx-auto flex max-w-3xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

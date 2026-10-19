@@ -709,6 +709,12 @@ Flag: `phase-170` (`NEXT_PUBLIC_FEATURE_PHASE_170` / `FEATURE_PHASE_170`), defau
 
 `ALBEDO_SUNSET_MODE` (server + client env) selects `parity-freeze` (default; `full` is an alias) or `retired`. Under parity-freeze, new Albedo call-site registration and intent-version drift are rejected (`CALL_SITE_FROZEN` / `PARITY_VERSION_DRIFT`). Once retired, `getAlbedoIntent()` throws before loading the intent bundle, the implicit popup flow short-circuits with bilingual migration copy, and `signTransaction` fails closed for Albedo sessions directing users to Freighter / Ledger / WalletConnect. The legacy implicit-tx banner is replaced by `components/albedo-sunset-banner.tsx`.
 
+## 21. Freighter Mobile Browser Support (Spike 627 / Issue #490)
+
+Flag: `phase-171` (`NEXT_PUBLIC_FEATURE_PHASE_171` / `FEATURE_PHASE_171`), default off. Rollback: unset var, restart.
+
+Client-side only — no new endpoints. `lib/freighter-mobile.ts` provides pure UA classification (`detectMobileEnvironment`), an injection-based support matrix (`freighterMobileSupport`: `in-app` | `extension` | `walletconnect-required`), idempotent `viewport-fit=cover` + `theme-color` injection, visualViewport keyboard-inset math published as `--phase-keyboard-inset`, a mobile-safe friendbot strategy (`same-tab` via `location.assign`, desktop keeps `window.open`), and a TTL'd sessionStorage return-flow marker (`@Phase/freighter-return-flow`) so interrupted connect/sign flows resume after switching to the Freighter app. `components/freighter-mobile-notice.tsx` (mounted under `FreighterConnect`) renders the WalletConnect / in-app-browser guidance on plain mobile browsers only.
+
 Enforcement surfaces:
 - `takedownSignal` & `restoreSignal` (`lib/signal-store.ts`)
 - `POST /api/signals/[id]/moderate`

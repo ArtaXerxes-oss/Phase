@@ -7,6 +7,7 @@ import {
   requestAlbedoImplicitTxFlow,
 } from "@/lib/albedo-intent-client"
 import { albedoRetiredMessage, isAlbedoRetired } from "@/lib/albedo-sunset"
+import { isFreighterMobile171Enabled, openFriendbot } from "@/lib/freighter-mobile"
 import { signTransaction } from "@/lib/stellar-wallet-kit"
 import { useLang } from "@/components/lang-context"
 import { TokenIcon } from "@/components/token-icon"
@@ -147,6 +148,13 @@ export function TrustlineButton({ address, onRequestConnect, onReady, className,
     }
 
     if (uiState === "GET_TESTNET_XLM") {
+      // Spike 627: on mobile (plain browser or Freighter in-app), window.open
+      // is blocked or spawned as a popup the in-app browser cannot return
+      // from — navigate same-tab instead. Legacy desktop behavior when off.
+      if (isFreighterMobile171Enabled()) {
+        openFriendbot(addr, typeof navigator !== "undefined" ? navigator.userAgent : null)
+        return
+      }
       if (typeof window !== "undefined") {
         window.open(`https://friendbot.stellar.org/?addr=${encodeURIComponent(addr)}`, "_blank", "noopener,noreferrer")
       }
