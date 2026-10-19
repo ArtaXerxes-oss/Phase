@@ -1,10 +1,11 @@
 "use client"
 
 import { albedoImplicitTxAllowed, isAlbedoSelectedInKit } from "@/lib/albedo-intent-client"
-import { albedoRetiredSignMessage, isAlbedoRetired } from "@/lib/albedo-sunset"
+import { isXBullSelected } from "@/lib/xbull-adapter"
 import { useCallback, useEffect, useState } from "react"
 import { createPortal } from "react-dom"
-import { signTransaction } from "@/lib/stellar-wallet-kit"
+import { isHardwareWalletSelected, signTransaction } from "@/lib/stellar-wallet-kit"
+
 import { toast } from "sonner"
 import { useLang } from "@/components/lang-context"
 import { TokenIcon } from "@/components/token-icon"
@@ -259,8 +260,16 @@ export function LiquidityFaucetControl({
       return false
     }
     onNarrativeLog?.(L.classicTrustlineEstablishing)
-    onNarrativeLog?.(L.classicTrustlineFreighter)
+    if (isXBullSelected()) {
+      onNarrativeLog?.("xBull: Confirm trustline in extension/web")
+    } else if (isHardwareWalletSelected()) {
+      onNarrativeLog?.("Ledger: Review and confirm trustline on hardware device screen")
+    } else {
+      onNarrativeLog?.(L.classicTrustlineFreighter)
+    }
+
     setRewardFlowPhase("trustline")
+
     try {
       // Spike 626: retired Albedo never reaches the implicit-session probe.
       if (isAlbedoSelectedInKit() && isAlbedoRetired()) {

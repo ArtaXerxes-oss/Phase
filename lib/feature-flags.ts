@@ -58,17 +58,14 @@
  *   mainnet cutover acknowledgement (spike 640 / issue #502)
  * - phase-164: self-attested age bands with 18+/21+ campaign gating (spike 637 / issue #499)
  * - phase-165: signed creator licensing attestation on world creation (spike 639 / issue #501)
- * - phase-166: terms-of-service and privacy-policy consent flows with versioning (spike 632 / issue #495)
- * - phase-167: data portability export per wallet with GDPR Article 20 bundle (spike 634 / issue #496)
- * - phase-168: audit exports for moderators and regulators with redaction and role-gating (spike 635 / issue #497)
- * - phase-169: legal-hold preservation with deny-delete during investigation (spike 636 / issue #498)
- * - phase-170: Albedo full retirement-or-parity plan with flagged sunset (spike 626 / issue #489)
- * - phase-171: Freighter mobile browser support with in-app UA, injection and return flow (spike 627 / issue #490)
- * - phase-172: biometric unlock for returning wallets with OS-gated session (spike 628 / issue #491)
- * - phase-173: Horizon-backed per-wallet transaction history timeline (spike 629 / issue #492)
+ * - phase-166: QR code flows for receive, offer-claim and referral share with camera scan (spike 622 / issue #485)
+ * - phase-167: WalletConnect v2 mobile session resilience with reconnect and chain-switch (spike 623 / issue #486)
+ * - phase-168: xBull full support with sign, trustline and Freighter-difference matrix (spike 624 / issue #487)
+ * - phase-169: Ledger blind-signing to clear-signing review for Soroban transactions (spike 625 / issue #488)
  */
 
 export type PhaseFeatureFlag =
+
   | "phase-66"
   | "phase-77"
   | "phase-78"
@@ -140,11 +137,8 @@ export type PhaseFeatureFlag =
   | "phase-166"
   | "phase-167"
   | "phase-168"
-  | "phase-169"
-  | "phase-170"
-  | "phase-171"
-  | "phase-172"
-  | "phase-173";
+  | "phase-169";
+
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-66": ["NEXT_PUBLIC_FEATURE_PHASE_66", "FEATURE_PHASE_66"],
@@ -218,11 +212,8 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-167": ["NEXT_PUBLIC_FEATURE_PHASE_167", "FEATURE_PHASE_167"],
   "phase-168": ["NEXT_PUBLIC_FEATURE_PHASE_168", "FEATURE_PHASE_168"],
   "phase-169": ["NEXT_PUBLIC_FEATURE_PHASE_169", "FEATURE_PHASE_169"],
-  "phase-170": ["NEXT_PUBLIC_FEATURE_PHASE_170", "FEATURE_PHASE_170"],
-  "phase-171": ["NEXT_PUBLIC_FEATURE_PHASE_171", "FEATURE_PHASE_171"],
-  "phase-172": ["NEXT_PUBLIC_FEATURE_PHASE_172", "FEATURE_PHASE_172"],
-  "phase-173": ["NEXT_PUBLIC_FEATURE_PHASE_173", "FEATURE_PHASE_173"],
 };
+
 
 function isTruthy(v: string | undefined): boolean {
   // Accept common deployment-system spellings while keeping unset values disabled.
@@ -328,11 +319,8 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-167",
     "phase-168",
     "phase-169",
-    "phase-170",
-    "phase-171",
-    "phase-172",
-    "phase-173",
   ];
+
   // Filtering is evaluated at call time, allowing runtime test overrides.
   return all.filter(isFeatureEnabled)
 }

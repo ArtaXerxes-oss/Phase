@@ -654,96 +654,46 @@ Sidecars (`.data/`, or `PHASE_SERVER_DATA_DIR`): `auth-sessions.json` (SHA-256 o
 
 Known gaps: header-based routes (`acting_wallet`, `X-Wallet-Address`) are not yet migrated to sessions; sidecar writes are unlocked (single-instance only, same as other sidecars); viewer/claim-side age gating and mainnet seeding are not implemented.
 
-## 16. Legal Consent and Versioning (Spike 632 / Issue #495)
+## 16. QR code flows and camera transport (spike 622)
 
-Flag: `phase-166` (`NEXT_PUBLIC_FEATURE_PHASE_166` / `FEATURE_PHASE_166`), default off. Rollback: unset var, restart.
+Flag: `phase-166` (`NEXT_PUBLIC_FEATURE_PHASE_166` / `FEATURE_PHASE_166`). Default off. See `PROJECT_ARCHITECTURE.md` §10.
 
-| Endpoint | Method | Scope | Contract |
-|---|---|---|---|
-| `/api/legal/documents` | GET | public | Returns canonical legal documents (Terms of Service, Privacy Policy), current active versions (`2026-10-01`), and SHA-256 content hashes with localized strings (`lang=en\|es`). |
-| `/api/legal/consent` | GET | wallet query | Returns consent status (`accepted`, `pending_documents`, `current_versions`) for a wallet. |
-| `/api/legal/consent` | POST | JSON | Validates document version and SHA-256 hash match, atomically records acceptance in `terms-consents.json`. |
-| `/api/profile` | GET | wallet query | When `phase-166` is enabled, enriches profile response with `consent` status. |
-| `/api/profile` | POST | JSON | When `phase-166` is enabled, enforces that the wallet has accepted the current legal agreements before modifying profile, returning `451 CONSENT_REQUIRED` otherwise. |
+- `lib/qr-code.ts`: Model 2 Version 2 pure SVG QR code generator, data URL formatter, SEP-0007 / referral parser, camera diagnostics with `diagnoseCameraError`.
+- `next.config.mjs`: `Permissions-Policy: camera=(self), microphone=(), geolocation=()` to allow video frame capture on the same origin.
+- Components: `components/qr-code-dialog.tsx` for generating and displaying styled QR codes with optional amount requests, `components/qr-scanner-modal.tsx` with camera viewfinder reticle and manual input fallback.
+- Routes: `GET /api/qr/encode` for server-side SVG generation.
+- Audit counters: `qr_generated_receive`, `qr_generated_referral`, `qr_scanned_success`, `qr_scanned_invalid`, `qr_camera_denied` in `lib/security-counters.ts`.
 
-Sidecars (`.data/`, or `PHASE_SERVER_DATA_DIR`): `terms-consents.json` (keyed by wallet, stores pinned versions and content digests), `legal-documents.json` (optional overrides).
+## 17. WalletConnect v2 mobile session resilience (spike 623)
 
-## 17. GDPR Article 20 Data Portability Export (Spike 634 / Issue #496)
+Flag: `phase-167` (`NEXT_PUBLIC_FEATURE_PHASE_167` / `FEATURE_PHASE_167`). Default off. See `PROJECT_ARCHITECTURE.md` §10.
 
-Flag: `phase-167` (`NEXT_PUBLIC_FEATURE_PHASE_167` / `FEATURE_PHASE_167`), default off. Rollback: unset var, restart.
+- `lib/walletconnect-resilience.ts`: Configurable relay URL resolution, multi-chain target resolution (`stellar:testnet` and `stellar:pubnet`), session metadata persistence in localStorage (`@PHASE/wc_session_metadata`), chain-switch guard, and mobile deep-link return helpers.
+- `lib/stellar-wallet-kit.ts`: `WalletConnectModule` initialized with dynamic `relayUrl` and multi-chain array.
+- Components: `components/walletconnect-banner.tsx` displaying peer wallet connection status, relay state, and one-click session reconnect.
+- Routes: `POST /api/wallet/session` recording session lifecycle telemetry.
+- Audit counters: `wc_session_restored`, `wc_session_expired`, `wc_reconnect_success`, `wc_reconnect_failed`, `wc_chain_mismatch_blocked` in `lib/security-counters.ts`.
 
-| Endpoint | Method | Scope | Contract |
-|---|---|---|---|
-| `/api/user/export` | GET | wallet query | Generates and downloads a unified GDPR Article 20 data portability bundle containing profile, follows, notifications, market activity, authored signals, badges, and consents. Includes cryptographic manifest with per-domain and aggregate SHA-256 checksums, redacts third-party PII, and sets `Content-Disposition: attachment`. |
-| `/api/profile/export` | GET | wallet query | Alias route forwarding to `/api/user/export`. |
+## 18. xBull wallet full support and parity (spike 624)
 
-Bundle manifest format: `phase-gdpr-article-20-bundle` with strict schema version `1.0.0`.
+Flag: `phase-168` (`NEXT_PUBLIC_FEATURE_PHASE_168` / `FEATURE_PHASE_168`). Default off. See `PROJECT_ARCHITECTURE.md` §10.
 
-## 18. Moderation & Regulatory Audit Export (Spike 635 / Issue #497)
+- `lib/xbull-adapter.ts`: xBull detection (`XBULL_ID`, `isXBullSelected()`), Freighter vs. xBull difference matrix, sign result normalization (`normalizeXBullSignResult()`), and error translation (`mapXBullError()`).
+- `components/wallet-badge.tsx`: Active wallet badge component displaying provider type (xBull, Freighter, Ledger, Albedo, WalletConnect) with contextual styling.
+- `lib/classic-liq.ts`: Updated `parseSignedTxXdr` with multi-format support accommodating xBull's return shape variations (`xdr`, `result`, `signedTxXdr`, raw string).
+- `lib/stellar-wallet-kit.ts`: Normalized signing pipeline routing xBull transactions through error mapping and result unpackers.
+- Audit counters: `xbull_sign_requested`, `xbull_sign_success`, `xbull_sign_rejected`, `xbull_trustline_signed`, `xbull_error_mapped` in `lib/security-counters.ts`.
 
-Flag: `phase-168` (`NEXT_PUBLIC_FEATURE_PHASE_168` / `FEATURE_PHASE_168`), default off. Rollback: unset var, restart.
+## 19. Ledger blind-signing to clear-signing review for Soroban (spike 625)
 
-| Endpoint | Method | Scope | Contract |
-|---|---|---|---|
-| `/api/moderation/export` | GET | role-gated | Exports moderation audit trail with date range (`from`, `to`), action, and cursor pagination. Role-gated by `x-admin-key` / `x-moderator-key` for `"moderator"` (unredacted internal view) and `x-regulator-token` for `"regulator"` (cryptographically pseudonymized wallets, stripped signatures, sanitized reasons). Supports formats `json`, `ndjson`, and `csv` with `Content-Disposition: attachment`. |
+Flag: `phase-169` (`NEXT_PUBLIC_FEATURE_PHASE_169` / `FEATURE_PHASE_169`). Default off. See `PROJECT_ARCHITECTURE.md` §10.
 
-Role credentials: `PHASE_ADMIN_KEY`, `PHASE_MODERATOR_KEY`, and `PHASE_REGULATOR_TOKEN`.
-
-## 19. Legal-Hold Preservation with Deny-Delete (Spike 636 / Issue #498)
-
-Flag: `phase-169` (`NEXT_PUBLIC_FEATURE_PHASE_169` / `FEATURE_PHASE_169`), default off. Rollback: unset var, restart.
-
-| Endpoint | Method | Scope | Contract |
-|---|---|---|---|
-| `/api/legal-hold` | GET | admin query | Queries active legal holds matching `target_type` (`wallet`, `signal`, `collection`, `listing`, `profile`) and `target_id`. |
-| `/api/legal-hold` | POST | admin key | Creates and places a legal hold with custodian credentials, matter identifier, reason, optional retention clock (`retention_days`), and optional `immutable_worm` flag. Returns `201 Created`. |
-| `/api/legal-hold/[id]/release` | POST | admin key | Releases an active legal hold. If `immutable_worm` is enabled, releases prior to retention clock expiration return `423 Locked`. |
-
-## 20. Albedo Retirement-or-Parity Sunset (Spike 626 / Issue #489)
-
-Flag: `phase-170` (`NEXT_PUBLIC_FEATURE_PHASE_170` / `FEATURE_PHASE_170`), default off. Rollback: unset var, restart.
-
-| Endpoint | Method | Scope | Contract |
-|---|---|---|---|
-| `/api/albedo/status` | GET | public | Returns the sunset program status: `enabled`, `mode` (`parity-freeze` \| `retired`), pinned `@albedo-link/intent` version (`0.12.0`), and the six-entry call-site migration registry (id, surface, file, replacement). |
-
-`ALBEDO_SUNSET_MODE` (server + client env) selects `parity-freeze` (default; `full` is an alias) or `retired`. Under parity-freeze, new Albedo call-site registration and intent-version drift are rejected (`CALL_SITE_FROZEN` / `PARITY_VERSION_DRIFT`). Once retired, `getAlbedoIntent()` throws before loading the intent bundle, the implicit popup flow short-circuits with bilingual migration copy, and `signTransaction` fails closed for Albedo sessions directing users to Freighter / Ledger / WalletConnect. The legacy implicit-tx banner is replaced by `components/albedo-sunset-banner.tsx`.
-
-## 21. Freighter Mobile Browser Support (Spike 627 / Issue #490)
-
-Flag: `phase-171` (`NEXT_PUBLIC_FEATURE_PHASE_171` / `FEATURE_PHASE_171`), default off. Rollback: unset var, restart.
-
-Client-side only — no new endpoints. `lib/freighter-mobile.ts` provides pure UA classification (`detectMobileEnvironment`), an injection-based support matrix (`freighterMobileSupport`: `in-app` | `extension` | `walletconnect-required`), idempotent `viewport-fit=cover` + `theme-color` injection, visualViewport keyboard-inset math published as `--phase-keyboard-inset`, a mobile-safe friendbot strategy (`same-tab` via `location.assign`, desktop keeps `window.open`), and a TTL'd sessionStorage return-flow marker (`@Phase/freighter-return-flow`) so interrupted connect/sign flows resume after switching to the Freighter app. `components/freighter-mobile-notice.tsx` (mounted under `FreighterConnect`) renders the WalletConnect / in-app-browser guidance on plain mobile browsers only.
-
-## 22. Biometric Unlock with OS-Gated Session (Spike 628 / Issue #491)
-
-Flag: `phase-172` (`NEXT_PUBLIC_FEATURE_PHASE_172` / `FEATURE_PHASE_172`), default off. Rollback: unset var, restart.
-
-Client-side only — no new endpoints, no contract change (off-chain, opposite layer from spike 555). `lib/biometric-unlock.ts` seals the session payload into an AES-GCM envelope keyed by an HKDF-derived, non-extractable key from a WebAuthn platform-authenticator assertion over a wallet-bound challenge (`phase-biometric-unlock-v1:<wallet>`). Storage: `@Phase/biometric-session-envelope` (ciphertext only, 7-day TTL) and `@Phase/biometric-lock-meta` (attempt counts only — no PII; 5 failures → 5-minute cooldown, user cancels do not consume attempts). `WalletProvider` gates every restore path (mount, focus, kit `STATE_UPDATED`) behind `requiresBiometricGate()`, mounting `components/wallet-lock-screen.tsx` (via `hooks/useBiometricUnlock.ts`); explicit connect seals, explicit disconnect forgets, and "Reconnect wallet" clears the envelope to fall back to the legacy flow. Corrupt, stale, and cross-wallet envelopes fail closed.
-
-Sidecars: none (localStorage ciphertext only).
-
-Enforcement surfaces:
-- `takedownSignal` & `restoreSignal` (`lib/signal-store.ts`)
-- `POST /api/signals/[id]/moderate`
-- `saveProfile` (`lib/profile-store.ts`)
-- `cancelListing` (`lib/market-store.ts`)
-- `markRead` & `markAllRead` (`lib/notification-store.ts`)
-
-Sidecar: `legal-holds.json` in `.data/` or `PHASE_SERVER_DATA_DIR`.
-
-## 23. Horizon Per-Wallet Transaction History Timeline (Spike 629 / Issue #492)
-
-Flag: `phase-173` (`NEXT_PUBLIC_FEATURE_PHASE_173` / `FEATURE_PHASE_173`), default off. Rollback: unset var, restart.
-
-| Endpoint | Method | Scope | Contract |
-|---|---|---|---|
-| `/api/history` | GET | wallet query | Returns a per-wallet timeline page: `address` (validated G… base32), `events[]` (typed `TimelineEvent` with kind/direction/amount/asset/counterparty/tx_hash/ledger/memo/correlation), `next_cursor` (smaller of both Horizon stream tails — gap-free), `cache` (`off` \| `miss` \| `fresh` \| `stale`), `indexed_at`. Params: `address` (required), `cursor`, `limit` (1–200, default 50). |
-
-Horizon reads (`transactions?account=` + `effects?account=`) run through `withHorizonBulkhead` with an 8s timeout; effects are the primary stream and transaction rows are merged in only where no effect covers the same hash (failed transactions preserved). settle ↔ forge correlation joins tx hashes against `settlement-store` and `generation-job-store` (lazy imports) producing `correlation: {kind: settle|forge-settle, settled, forge_job_id, forge_job_status, collection_id}`. The in-memory cache (300 entries, 30s TTL, key `wallet:cursor`) serves fresh pages and degrades to stale-on-error. Errors: `400` invalid address/limit, `404` flag off, `502` Horizon failure, `503` Horizon 429.
-
-Sidecars: none (in-memory cache only). UI: `components/wallet-history-timeline.tsx` on the dashboard PHASE_VAULT tab.
-
+- `lib/ledger-soroban-decoder.ts`: Decodes `invokeHostFunction` operations, extracts contract address, host function name (`settle`, `create_collection`, `transfer`, `initiate_phase`), and native arguments. Computes canonical verification hash and 8-character verification code (`VREF-XXXX-XXXX`) matching on-device pre-image. Performs preflight validation to catch Gate #13 errors (`SelfTransfer` and invalid caller/balance) before prompting hardware.
+- `components/ledger-clear-signing-modal.tsx`: Preflight review modal showing contract target, function, decoded arguments, fee, and verification code with confirmation before transmitting to device.
+- `lib/phase-host-error.ts`: Added `humanizeLedgerHardwareErrorMessage` recognizing `0x6b0c` / `0x6a15` (blind-signing disabled in Ledger Stellar app settings), `0x6985` (user rejected), and `0x6e00` (device locked or disconnected).
+- `lib/stellar-wallet-kit.ts`: Intercepts hardware wallet signing with preflight validation when `phase-169` is enabled.
+- Audit counters: `ledger_clear_signing_reviewed`, `ledger_clear_signing_approved`, `ledger_clear_signing_rejected`, `ledger_blind_signing_blocked`, `ledger_gate13_preempted` in `lib/security-counters.ts`.
+- Routes: `POST /api/wallet/ledger` for clear-signing lifecycle telemetry.
 
 
 

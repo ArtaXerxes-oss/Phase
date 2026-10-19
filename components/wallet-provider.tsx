@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 "use client"
 
 import {
@@ -33,12 +33,18 @@ import {
   initStellarWalletKit,
   isHardwareWalletSelected,
   isWalletConnectSelected,
+  isXBullSelected,
   kit,
   KitEventType,
   parseError,
   TESTNET_PASSPHRASE,
 } from "@/lib/stellar-wallet-kit"
 import { cn } from "@/lib/utils"
+import { QrCodeDialog } from "@/components/qr-code-dialog"
+import { WalletConnectBanner } from "@/components/walletconnect-banner"
+import { LedgerClearSigningModal } from "@/components/ledger-clear-signing-modal"
+import type { DecodedSorobanInvocation } from "@/lib/ledger-soroban-decoder"
+
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Types
@@ -54,6 +60,8 @@ type WalletContextValue = {
   isHardwareWallet: boolean
   /** Whether the active module is WalletConnect. */
   isWalletConnect: boolean
+  /** Whether the active module is xBull. */
+  isXBull: boolean
   connect: () => Promise<void>
   disconnect: () => void
   /** Re-sync con la wallet vÃ­a kit; devuelve la direcciÃ³n activa o null. */
@@ -65,7 +73,10 @@ type WalletContextValue = {
   openWalletPicker: () => Promise<string | null>
   refreshArtistAlias: () => Promise<string | null>
   saveArtistAlias: (alias: string) => Promise<{ ok: true } | { ok: false; error: string }>
+  openQrReceive: () => void
+  requestLedgerReview?: (decoded: DecodedSorobanInvocation) => Promise<boolean>
 }
+
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Constants
@@ -104,6 +115,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [aliasLoading, setAliasLoading] = useState(false)
   const [isHardwareWallet, setIsHardwareWallet] = useState(false)
   const [isWalletConnect, setIsWalletConnect] = useState(false)
+  const [isXBull, setIsXBull] = useState(false)
+  const [qrReceiveOpen, setQrReceiveOpen] = useState(false)
 
   /** True when user deliberately disconnected â€” blocks session restoration. */
   const userDisconnectedRef = useRef(false)
@@ -122,6 +135,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Network passphrase mismatch alert â€” shown when Ledger is connected but the
   // kit's active network doesn't match TESTNET_PASSPHRASE.
   const [networkMismatch, setNetworkMismatch] = useState<string | null>(null)
+  const [ledgerReviewModal, setLedgerReviewModal] = useState<{
+    isOpen: boolean
+    decoded: DecodedSorobanInvocation | null
+    resolve: (approved: boolean) => void
+  } | null>(null)
+
+  const requestLedgerReview = useCallback((decoded: DecodedSorobanInvocation): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setLedgerReviewModal({
+        isOpen: true,
+        decoded,
+        resolve,
+      })
+    })
+  }, [])
 
   // â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -129,6 +157,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const syncModuleFlags = useCallback(() => {
     setIsHardwareWallet(isHardwareWalletSelected())
     setIsWalletConnect(isWalletConnectSelected())
+    setIsXBull(isXBullSelected())
   }, [])
 
   /**
@@ -652,6 +681,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setNetworkMismatch(null)
     setIsHardwareWallet(false)
     setIsWalletConnect(false)
+    setIsXBull(false)
   }, [stopHeartbeat])
 
   // â”€â”€ context value â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -665,12 +695,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       aliasLoading,
       isHardwareWallet,
       isWalletConnect,
+      isXBull,
       connect,
       disconnect,
       refresh,
       openWalletPicker,
       refreshArtistAlias,
       saveArtistAlias,
+      openQrReceive: () => setQrReceiveOpen(true),
+      requestLedgerReview,
     }),
     [
       address,
@@ -680,14 +713,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       aliasLoading,
       isHardwareWallet,
       isWalletConnect,
+      isXBull,
       connect,
       disconnect,
       refresh,
       openWalletPicker,
       refreshArtistAlias,
       saveArtistAlias,
+      requestLedgerReview,
     ],
   )
+
 
   // â”€â”€ render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -695,10 +731,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     <>
       <WalletContext.Provider value={value}>{children}</WalletContext.Provider>
 
-      {/* Spike 628: tap-to-unlock middle state — sealed session held behind OS biometric. */}
-      {biometricLocked ? (
-        <WalletLockScreen onUnlocked={handleBiometricUnlocked} onSkip={handleBiometricSkip} />
-      ) : null}
+      <WalletConnectBanner />
 
       {/* â”€â”€ Network passphrase mismatch alert (Ledger on wrong network) â”€â”€â”€â”€ */}
       {networkMismatch && address && isHardwareWallet && (
@@ -782,8 +815,33 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
+
+      {address && (
+        <QrCodeDialog
+          open={qrReceiveOpen}
+          onOpenChange={setQrReceiveOpen}
+          mode="receive"
+          address={address}
+        />
+      )}
+
+      {ledgerReviewModal?.isOpen && (
+        <LedgerClearSigningModal
+          isOpen={ledgerReviewModal.isOpen}
+          decoded={ledgerReviewModal.decoded}
+          onApprove={() => {
+            ledgerReviewModal.resolve(true)
+            setLedgerReviewModal(null)
+          }}
+          onCancel={() => {
+            ledgerReviewModal.resolve(false)
+            setLedgerReviewModal(null)
+          }}
+        />
+      )}
     </>
   )
+
 }
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
