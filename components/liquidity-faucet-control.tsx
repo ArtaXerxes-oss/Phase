@@ -271,6 +271,13 @@ export function LiquidityFaucetControl({
     setRewardFlowPhase("trustline")
 
     try {
+      // Spike 626: retired Albedo never reaches the implicit-session probe.
+      if (isAlbedoSelectedInKit() && isAlbedoRetired()) {
+        const retiredMsg = albedoRetiredSignMessage()
+        onNarrativeLog?.(retiredMsg)
+        toast.error(retiredMsg)
+        return false
+      }
       if (isAlbedoSelectedInKit() && !(await albedoImplicitTxAllowed(address))) {
         onNarrativeLog?.(chamber.rewardsTrustlineAlbedoImplicitRequired)
         toast.error(chamber.rewardsTrustlineAlbedoImplicitRequired)

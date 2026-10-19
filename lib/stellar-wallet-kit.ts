@@ -207,6 +207,17 @@ export async function signTransaction(
     }
   }
 
+  // ── Albedo sunset guard (spike 626) ───────────────────────────────────────
+  // Retired: fail closed with migration copy instead of demanding the popup
+  // permission that the sunset removed.
+  if (typeof window !== "undefined" && opts.address && isAlbedoSelectedInKit() && isAlbedoRetired()) {
+    return {
+      error: {
+        message: albedoRetiredSignMessage(),
+      },
+    }
+  }
+
   // ── Albedo implicit-tx guard ───────────────────────────────────────────────
   if (typeof window !== "undefined" && opts.address && isAlbedoSelectedInKit()) {
     const implicitOk = await albedoImplicitTxAllowed(opts.address)
