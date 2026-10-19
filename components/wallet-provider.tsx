@@ -16,6 +16,7 @@ import {
   isAlbedoSelectedInKit,
   requestAlbedoImplicitTxFlow,
 } from "@/lib/albedo-intent-client"
+import { isAlbedoRetired } from "@/lib/albedo-sunset"
 import {
   initStellarWalletKit,
   isHardwareWalletSelected,
@@ -120,6 +121,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       return
     }
     if (!isAlbedoSelectedInKit()) {
+      setAlbedoTxPrep("hidden")
+      return
+    }
+    // Spike 626: the legacy "Permitir firma" banner is superseded by the Albedo
+    // sunset banner once the retirement program is active.
+    if (isAlbedoRetired()) {
       setAlbedoTxPrep("hidden")
       return
     }

@@ -2,6 +2,7 @@
 "use client"
 
 import { albedoImplicitTxAllowed, isAlbedoSelectedInKit } from "@/lib/albedo-intent-client"
+import { albedoRetiredSignMessage, isAlbedoRetired } from "@/lib/albedo-sunset"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
@@ -1052,6 +1053,13 @@ export function FusionChamber() {
     setClassicBusy(true)
     try {
       const chCopy = pickCopy(lang).chamber
+      // Spike 626: retired Albedo never reaches the implicit-session probe.
+      if (isAlbedoSelectedInKit() && isAlbedoRetired()) {
+        const retiredMsg = albedoRetiredSignMessage()
+        toast.error(retiredMsg)
+        appendLog(retiredMsg)
+        return
+      }
       if (isAlbedoSelectedInKit() && !(await albedoImplicitTxAllowed(address))) {
         toast.error(chCopy.rewardsTrustlineAlbedoImplicitRequired)
         appendLog(chCopy.rewardsTrustlineAlbedoImplicitRequired)

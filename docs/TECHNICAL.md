@@ -699,6 +699,16 @@ Flag: `phase-169` (`NEXT_PUBLIC_FEATURE_PHASE_169` / `FEATURE_PHASE_169`), defau
 | `/api/legal-hold` | POST | admin key | Creates and places a legal hold with custodian credentials, matter identifier, reason, optional retention clock (`retention_days`), and optional `immutable_worm` flag. Returns `201 Created`. |
 | `/api/legal-hold/[id]/release` | POST | admin key | Releases an active legal hold. If `immutable_worm` is enabled, releases prior to retention clock expiration return `423 Locked`. |
 
+## 20. Albedo Retirement-or-Parity Sunset (Spike 626 / Issue #489)
+
+Flag: `phase-170` (`NEXT_PUBLIC_FEATURE_PHASE_170` / `FEATURE_PHASE_170`), default off. Rollback: unset var, restart.
+
+| Endpoint | Method | Scope | Contract |
+|---|---|---|---|
+| `/api/albedo/status` | GET | public | Returns the sunset program status: `enabled`, `mode` (`parity-freeze` \| `retired`), pinned `@albedo-link/intent` version (`0.12.0`), and the six-entry call-site migration registry (id, surface, file, replacement). |
+
+`ALBEDO_SUNSET_MODE` (server + client env) selects `parity-freeze` (default; `full` is an alias) or `retired`. Under parity-freeze, new Albedo call-site registration and intent-version drift are rejected (`CALL_SITE_FROZEN` / `PARITY_VERSION_DRIFT`). Once retired, `getAlbedoIntent()` throws before loading the intent bundle, the implicit popup flow short-circuits with bilingual migration copy, and `signTransaction` fails closed for Albedo sessions directing users to Freighter / Ledger / WalletConnect. The legacy implicit-tx banner is replaced by `components/albedo-sunset-banner.tsx`.
+
 Enforcement surfaces:
 - `takedownSignal` & `restoreSignal` (`lib/signal-store.ts`)
 - `POST /api/signals/[id]/moderate`

@@ -62,6 +62,7 @@
  * - phase-167: data portability export per wallet with GDPR Article 20 bundle (spike 634 / issue #496)
  * - phase-168: audit exports for moderators and regulators with redaction and role-gating (spike 635 / issue #497)
  * - phase-169: legal-hold preservation with deny-delete during investigation (spike 636 / issue #498)
+ * - phase-170: Albedo full retirement-or-parity plan with flagged sunset (spike 626 / issue #489)
  */
 
 export type PhaseFeatureFlag =
@@ -136,7 +137,8 @@ export type PhaseFeatureFlag =
   | "phase-166"
   | "phase-167"
   | "phase-168"
-  | "phase-169";
+  | "phase-169"
+  | "phase-170";
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-66": ["NEXT_PUBLIC_FEATURE_PHASE_66", "FEATURE_PHASE_66"],
@@ -210,6 +212,7 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-167": ["NEXT_PUBLIC_FEATURE_PHASE_167", "FEATURE_PHASE_167"],
   "phase-168": ["NEXT_PUBLIC_FEATURE_PHASE_168", "FEATURE_PHASE_168"],
   "phase-169": ["NEXT_PUBLIC_FEATURE_PHASE_169", "FEATURE_PHASE_169"],
+  "phase-170": ["NEXT_PUBLIC_FEATURE_PHASE_170", "FEATURE_PHASE_170"],
 };
 
 function isTruthy(v: string | undefined): boolean {
@@ -316,6 +319,7 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-167",
     "phase-168",
     "phase-169",
+    "phase-170",
   ];
   // Filtering is evaluated at call time, allowing runtime test overrides.
   return all.filter(isFeatureEnabled)

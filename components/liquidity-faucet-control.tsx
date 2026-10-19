@@ -1,6 +1,7 @@
 "use client"
 
 import { albedoImplicitTxAllowed, isAlbedoSelectedInKit } from "@/lib/albedo-intent-client"
+import { albedoRetiredSignMessage, isAlbedoRetired } from "@/lib/albedo-sunset"
 import { useCallback, useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { signTransaction } from "@/lib/stellar-wallet-kit"
@@ -261,6 +262,13 @@ export function LiquidityFaucetControl({
     onNarrativeLog?.(L.classicTrustlineFreighter)
     setRewardFlowPhase("trustline")
     try {
+      // Spike 626: retired Albedo never reaches the implicit-session probe.
+      if (isAlbedoSelectedInKit() && isAlbedoRetired()) {
+        const retiredMsg = albedoRetiredSignMessage()
+        onNarrativeLog?.(retiredMsg)
+        toast.error(retiredMsg)
+        return false
+      }
       if (isAlbedoSelectedInKit() && !(await albedoImplicitTxAllowed(address))) {
         onNarrativeLog?.(chamber.rewardsTrustlineAlbedoImplicitRequired)
         toast.error(chamber.rewardsTrustlineAlbedoImplicitRequired)
