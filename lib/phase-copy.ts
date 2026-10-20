@@ -156,6 +156,19 @@ export type PricingCopy = {
   useSuggestion: string
 }
 
+/** phase-174 (spike 612): A/B experiment copy variants for the forge/chamber payment gate. */
+export type ForgeExperimentVariantCopy = {
+  label: string
+  /** `{amount}` = formatted variant price. */
+  paymentGateExplainer: string
+  paymentGateHint: string
+}
+
+export type ForgeExperimentCopy = {
+  /** Keyed by copyKey (variant id, or "control"). Unknown keys fall back to control. */
+  variants: Record<string, ForgeExperimentVariantCopy>
+}
+
 /** phase-146: moderation pre-screen. */
 export type ModerationQueueCopy = {
   heldNotice: string
@@ -773,6 +786,7 @@ export const phaseCopy: Record<
     pricing: PricingCopy
     moderationQueue: ModerationQueueCopy
     questArcs: QuestArcCopy
+    forgeExperiment: ForgeExperimentCopy
     qrFlows: Record<"receiveTitle" | "scanTitle" | "shareReferral" | "scanPrompt" | "copyUri" | "copied" | "requestAmount" | "scanQr" | "viewQr" | "manualEntry" | "cameraError", string>
     walletConnectResilience: Record<"title" | "reconnectPrompt" | "chainMismatch" | "openMobileWallet" | "relayDisconnected" | "reconnectedToast", string>
     xbullParity: Record<"badge" | "signPrompt" | "trustlinePrompt" | "rejected" | "networkMismatch", string>
@@ -1441,6 +1455,25 @@ export const phaseCopy: Record<
       viewQr: "Show QR",
       manualEntry: "Or enter address manually",
       cameraError: "Camera access unavailable",
+    },
+    forgeExperiment: {
+      variants: {
+        control: {
+          label: "Standard",
+          paymentGateExplainer: "Pay {amount} PHASELQ to the Forge Agent — your artifact is generated and minted on the Stellar ledger automatically.",
+          paymentGateHint: "One payment settles on-chain; your artifact is minted automatically.",
+        },
+        price_cut: {
+          label: "Launch price",
+          paymentGateExplainer: "Launch price: pay {amount} PHASELQ to the Forge Agent — same on-chain settlement, same automatic mint.",
+          paymentGateHint: "Launch pricing — one on-chain payment, artifact minted automatically.",
+        },
+        copy_urgent: {
+          label: "Limited",
+          paymentGateExplainer: "Secure your artifact for {amount} PHASELQ — settlement is on-chain and minting is automatic.",
+          paymentGateHint: "Limited window — pay once on-chain and the Forge mints your artifact automatically.",
+        },
+      },
     },
     walletConnectResilience: {
       title: "WalletConnect v2 Resilience",
@@ -2151,6 +2184,25 @@ export const phaseCopy: Record<
       manualEntry: "O ingresá la dirección manualmente",
       cameraError: "Acceso a cámara no disponible",
     },
+    forgeExperiment: {
+      variants: {
+        control: {
+          label: "Estándar",
+          paymentGateExplainer: "Pagá {amount} PHASELQ al Forge Agent — tu artefacto se genera y se mintea en el ledger de Stellar automáticamente.",
+          paymentGateHint: "Un pago se liquida on-chain; tu artefacto se mintea automáticamente.",
+        },
+        price_cut: {
+          label: "Precio de lanzamiento",
+          paymentGateExplainer: "Precio de lanzamiento: pagá {amount} PHASELQ al Forge Agent — misma liquidación on-chain, mismo mint automático.",
+          paymentGateHint: "Precio de lanzamiento — un pago on-chain y el Forge mintea tu artefacto automáticamente.",
+        },
+        copy_urgent: {
+          label: "Por tiempo limitado",
+          paymentGateExplainer: "Asegurá tu artefacto por {amount} PHASELQ — la liquidación es on-chain y el mint es automático.",
+          paymentGateHint: "Ventana limitada — pagá una vez on-chain y el Forge mintea tu artefacto automáticamente.",
+        },
+      },
+    },
     walletConnectResilience: {
       title: "Resiliencia WalletConnect v2",
       reconnectPrompt: "Sesión WalletConnect interrumpida. Hacé clic en Reconectar para restaurar el enlace móvil.",
@@ -2216,4 +2268,11 @@ export function fillCopy(template: string, vars: Record<string, string | number>
   return template.replace(/\{([a-z_]+)\}/gi, (match, key: string) =>
     Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key]) : match,
   )
+}
+
+/** phase-174 (spike 612): experiment copy variant for a language; unknown keys fall back to control. */
+export function pickForgeExperimentCopy(lang: unknown, copyKey: string): ForgeExperimentVariantCopy {
+  const registry = pickCopy(lang).forgeExperiment.variants
+  const key = copyKey.trim() || "control"
+  return registry[key] ?? registry.control!
 }

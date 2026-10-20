@@ -704,6 +704,43 @@ Flag: `phase-169` (`NEXT_PUBLIC_FEATURE_PHASE_169` / `FEATURE_PHASE_169`). Defau
 
 Flag: `phase-170` (`NEXT_PUBLIC_FEATURE_PHASE_170` / `FEATURE_PHASE_170`). Default off. See `PROJECT_ARCHITECTURE.md` §10 and `docs/spikes/606-log-pipeline-findings.md`.
 
+
+## 20. A/B experimentation framework (spike 612)
+
+Flag: `phase-174` (`NEXT_PUBLIC_FEATURE_PHASE_174` / `FEATURE_PHASE_174`). Default off. See `PROJECT_ARCHITECTURE.md` §10.
+
+- `lib/experiments.ts`: Deterministic FNV-1a bucket over `(salt, experimentId, subject)` with weighted variants, holdout slice, and sticky assignment persistence in `experiment-assignments.json` (subjects stored as sha256 hex only). Config comes from `PHASE_EXPERIMENT_CONFIG` (JSON, experiment id `forge_price_v1`); salt override `PHASE_EXPERIMENT_SALT`. Every resolver fails safe to control (`REQUIRED_AMOUNT` + control copy).
+- `lib/forge/payment-verifier.ts`: `resolveForgePaymentAmount(payer)` is the single source of truth for challenge amount, `paymentRequirements`, `X-Required-Amount` header and the on-chain verifier floor. `app/api/agent/forge` no longer clobbers the challenge with `REQUIRED_AMOUNT` — it settles the payer's resolved variant amount.
+- Routes: `GET /api/experiments/forge?wallet=&lang=` (404 when flag off) serves variant copy + price for client display; forge page overrides the AWAITING_PAYMENT hint, the chamber overrides `paymentGateExplainer` (chamber price stays on-chain authoritative).
+- Copy: `forgeExperiment.variants` in `lib/phase-copy.ts` (EN/ES) via `pickForgeExperimentCopy(lang, copyKey)`.
+- Findings: `docs/spikes/612-ab-experimentation-findings.md`.
+
+## 21. Search analytics (spike 613)
+
+Flag: `phase-175` (`NEXT_PUBLIC_FEATURE_PHASE_175` / `FEATURE_PHASE_175`). Default off. See `PROJECT_ARCHITECTURE.md` §10.
+
+- `lib/search-query-log.ts`: Bounded (5,000) append-only event log in `search-query-log.json`; closed `surface` (`world`/`profile`/`explore`) and `kind` (`query`/`click`) enums; queries, result refs and wallets stored only as sha256 hex. 60s duplicate window per `(surface, kind, query_hash, session_id)`.
+- Aggregation: pure `computeSearchReport` — per-surface zero-result rate, clickthrough rate, and typo success rate (a `corrected_from_hash` query counts as recovered only when a later same-session query hit results). `getSearchAnalyticsReport` wraps the sidecar read.
+- Hooks: `app/api/world/search` logs free-text queries (`q`, optional `q0`/`sid`); `app/api/profile/search` logs `q>=2`; `POST /api/search/click` is the clickthrough beacon (404 when flag off). All writes are non-blocking.
+- Counters (closed labels): `search_query_total`, `search_zero_result`, `search_click`, `search_typo_corrected`.
+- Findings: `docs/spikes/613-search-analytics-findings.md`.
+
+## 22. Cost accounting per surface with budgets and kill-switches (spike 614)
+
+Flag: `phase-176` (`NEXT_PUBLIC_FEATURE_PHASE_176` / `FEATURE_PHASE_176`). Default off. See `PROJECT_ARCHITECTURE.md` §10.
+
+- `lib/cost-budgets.ts`: Closed `COST_SURFACES` taxonomy; per-surface budgets from `PHASE_COST_BUDGET_<SURFACE>` (units; unset = unlimited); persisted daily burn windows in `cost-budgets.json` (window length `PHASE_COST_BUDGET_WINDOW_MS`, default 24h). Warning at 80% (`PHASE_COST_BUDGET_WARNING_RATIO`), halt at ≥100%.
+- Kill-switch: `isSurfaceHalted(surface)` (process-local cache refreshed under the store lock); `forge-agent` and `agent/forge` refuse with `503 FORGE_SURFACE_HALTED` + `Retry-After: 300` before spend; refused charges increment `budget_halt_refusal`.
+- Alerts: `evaluateSurfaceBudgets` fires `sendWebhookAlert` only on alert-level transitions (warning / critical / recovery info). Hourly cron `GET /api/cron/cost-budgets` (`CRON_SECRET` / `x-vercel-cron` auth, registered in `vercel.json`); operator view `GET /api/cost-budgets/health` evaluates without alerts.
+- Findings: `docs/spikes/614-cost-accounting-budgets-findings.md`.
+
+## 23. Billing and metering for paid forge tiers (spike 615)
+
+Flag: `phase-177` (`NEXT_PUBLIC_FEATURE_PHASE_177` / `FEATURE_PHASE_177`). Default off. See `PROJECT_ARCHITECTURE.md` §10.
+
+- `lib/forge/billing.ts`: Per-wallet UTC-day metering in `forge-billing.json` (wallets hashed; bounded 5,000 wallet-days / 200 jobs per day). Idempotent by `jobId` so serverless retries cannot double-count. Tier limits from `PHASE_FORGE_BILLING_TIERS` JSON (defaults standard 5 … obsidian 100); invalid config fails safe to defaults.
+- Enforcement: `agent/forge` checks quota before settle (no wasted payment); `forge-agent` checks after settlement verification (replay fence first) and refuses with `429 FORGE_QUOTA_EXCEEDED` + `Retry-After` (seconds to UTC-day reset, floor 60). Accepted jobs are metered and book `chargeSurfaceCost("forge", 20)` against the spike-614 budget.
+- Findings: `docs/spikes/615-forge-billing-metering-findings.md`.
 - `lib/log-pipeline.ts`: `redactLogValue` (masks `S...` seeds and secret-named keys such as `rawPayload`, `errorResult`, `authorization`; cycle/depth safe), `shouldSampleLog` (warn/error always kept, info sampled by FNV hash of the correlation id so a request is kept or dropped whole), `toPipelineRecord` (only `level`, `event`, `route`, `method`, `status_class` are labels; wallets, CIDs, token ids, hashes stay unindexed in `fields`), and `LogPipeline` (bounded buffer, drop-oldest, single-flight flush, abort timeout, at-most-once delivery).
 - `lib/api-observability.ts`: every `log()` goes through `emitLog`, so the console line is redacted too when the flag is on.
 - Env: `LOG_SINK_URL` (https only, validated in `serverEnvSchema`), `LOG_SINK_TOKEN`, `LOG_SAMPLE_RATE_INFO` (0..1, default 0.1), `LOG_SINK_BATCH_SIZE`, `LOG_SINK_MAX_BUFFER`, `LOG_SINK_FLUSH_MS`, `LOG_SINK_TIMEOUT_MS`.

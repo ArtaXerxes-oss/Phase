@@ -195,6 +195,30 @@ export function FusionChamber() {
   const [narrativeData, setNarrativeData] = useState<string | null>(null)
   const [narrativeLoading, setNarrativeLoading] = useState(false)
 
+  // Spike 612 (phase-174): experiment copy variant for the payment gate. The
+  // chamber's actual price is the on-chain collection price (authoritative);
+  // only the explainer copy varies here — price variants live in the
+  // forge-agent 402 flow where the server resolves and verifies one amount.
+  const [expGateCopy, setExpGateCopy] = useState<{ paymentGateExplainer: string } | null>(null)
+  useEffect(() => {
+    if (!isFeatureEnabled("phase-174")) return
+    let cancelled = false
+    const params = new URLSearchParams({ lang })
+    if (address) params.set("wallet", address)
+    void fetch(`/api/experiments/forge?${params.toString()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const explainer = data?.copy?.paymentGateExplainer
+        if (!cancelled && typeof explainer === "string" && data?.variantId !== "control") {
+          setExpGateCopy({ paymentGateExplainer: explainer })
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [address, lang])
+
   const effectivePriceStroops = useMemo(() => {
     if (collectionId > 0 && collectionInfo?.price) return collectionInfo.price
     return REQUIRED_AMOUNT
@@ -2333,7 +2357,7 @@ export function FusionChamber() {
             >
               {!canInitializeGenesisSupply && !processing && (
                 <p className="mb-1.5 text-center text-[9px] leading-relaxed text-zinc-500 sm:text-left">
-                  {ch.paymentGateExplainer.replace("{amount}", stroopsToLiqDisplay(effectivePriceStroops))}
+                  {(expGateCopy?.paymentGateExplainer ?? ch.paymentGateExplainer).replace("{amount}", stroopsToLiqDisplay(effectivePriceStroops))}
                 </p>
               )}
               <button
