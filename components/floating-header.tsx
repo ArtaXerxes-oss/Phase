@@ -1,6 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { usePathname } from "next/navigation"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { isFeatureEnabled } from "@/lib/feature-flags"
 import { AlbedoSunsetBanner } from "@/components/albedo-sunset-banner"
 import { FreighterConnect } from "@/components/freighter-connect"
 import { LangToggle } from "@/components/lang-toggle"
@@ -39,6 +42,8 @@ function BellButton() {
 
 export function FloatingHeader() {
   const [scrolled, setScrolled] = useState(false)
+  const pathname = usePathname()
+  const mobile = useIsMobile()
 
   useEffect(() => {
     const check = () => setScrolled(window.scrollY > TICKER_PX)
@@ -47,6 +52,7 @@ export function FloatingHeader() {
     return () => window.removeEventListener("scroll", check)
   }, [])
 
+  if (mobile && isFeatureEnabled("phase-174") && (pathname === "/forge" || pathname === "/chamber")) return null
   return (
     <div
       style={{

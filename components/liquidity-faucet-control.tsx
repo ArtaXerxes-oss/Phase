@@ -25,6 +25,7 @@ import {
 } from "@/lib/phase-protocol"
 import { playTacticalUiClick } from "@/lib/tactical-ui-click"
 import { cn } from "@/lib/utils"
+import { albedoRetiredSignMessage, isAlbedoRetired } from "@/lib/albedo-sunset"
 
 function comparableStellarAccountG(addr: string): string {
   const t = addr.trim()

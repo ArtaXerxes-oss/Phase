@@ -28,7 +28,6 @@ import {
   validateLedgerPreflight,
   mapLedgerHardwareError,
 } from "@/lib/ledger-soroban-decoder"
-import { randomUUID } from "node:crypto"
 
 
 let initialized = false
@@ -50,7 +49,7 @@ const WC_PROJECT_ID =
 
 function generatePostMessageNonce(): string {
   if (typeof window === "undefined") return ""
-  const nonce = randomUUID()
+  const nonce = window.crypto.randomUUID()
   try {
     window.localStorage.setItem(LS_POSTMESSAGE_NONCE, nonce)
     window.localStorage.setItem(LS_POSTMESSAGE_ORIGIN, window.location.origin)

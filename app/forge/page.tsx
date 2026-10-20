@@ -1,5 +1,8 @@
 "use client"
 
+import { useMobileViewport, useMobileDialogFocus, useIsMobile } from "@/hooks/use-mobile"
+import { FreighterConnect } from "@/components/freighter-connect"
+import { IntentTarget } from "@/components/intent-target"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 import { createPortal } from "react-dom"
@@ -217,6 +220,8 @@ type FaucetQuestBrief = {
 }
 
 export default function ForgePage() {
+  useMobileViewport()
+  const mobile = useIsMobile()
   const { lang } = useLang()
   const copy = pickCopy(lang)
   const f = copy.forge
@@ -279,6 +284,7 @@ export default function ForgePage() {
 
   type ForgeOverlay = null | "rewards" | "protocol" | "lore" | "collection"
   const [forgeOverlay, setForgeOverlay] = useState<ForgeOverlay>(null)
+  useMobileDialogFocus(!!forgeOverlay, '[aria-labelledby="forge-overlay-title"]')
   const [faucetBrief, setFaucetBrief] = useState<FaucetQuestBrief | null>(null)
   const prevForgeOverlay = useRef<ForgeOverlay>(null)
 
@@ -1195,7 +1201,8 @@ export default function ForgePage() {
   ])
 
   return (
-    <div className="tactical-command-root tactical-command-root--chamber tactical-command-root--cockpit tactical-command-root--stable relative flex h-screen max-h-[100dvh] flex-col overflow-x-hidden overflow-y-hidden font-mono text-foreground antialiased">
+    <div data-mobile-layout={isFeatureEnabled("phase-174") || undefined}
+      className="tactical-command-root tactical-command-root--chamber tactical-command-root--cockpit tactical-command-root--stable relative flex h-screen max-h-[100dvh] flex-col overflow-x-hidden overflow-y-hidden font-mono text-foreground antialiased">
       <div className="tactical-film-grain" aria-hidden />
       <div className="tactical-crt-veil" aria-hidden />
       <div className="tactical-crt-fine opacity-50" aria-hidden />
@@ -1209,6 +1216,7 @@ export default function ForgePage() {
           {f.title}
         </span>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {mobile && isFeatureEnabled("phase-174") && <FreighterConnect />}
           <LangToggle variant="phosphor" />
           <Link href="/world" className={forgeNavBtn} onClick={() => playTacticalUiClick()}>
             {lang === "es" ? "Mundos" : "World"}
@@ -1222,6 +1230,7 @@ export default function ForgePage() {
         </div>
       </header>
 
+      <IntentTarget />
       <main
         className={cn(
           "custom-scrollbar relative z-10 flex min-h-0 flex-1 flex-col overflow-x-hidden px-3 py-2 md:px-5 md:py-3",

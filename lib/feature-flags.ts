@@ -6,6 +6,7 @@
  *
  * Flags:
  * - phase-79: watchlist notifications for price drops
+ * - phase-80: fractional ownership for high-value artifacts (co-ownership, listing, purchase)
  * - phase-88: on-chain follow suggestions
  * - phase-89: scheduled signal broadcast queues
  * - phase-90: community polls as a signal subtype
@@ -70,14 +71,23 @@
  *   kill-switches (spike 614 / issue #477)
  * - phase-177: Billing and metering for paid forge tiers with quota
  *   enforcement (spike 615 / issue #478)
+ * - phase-170: structured log pipeline with redaction, sampling and a batched external sink (spike 606 / issue #470)
+ * - phase-171: backup and disaster-recovery snapshots for sidecars, SQLite and the secrets map (spike 605 / issue #469)
+ * - phase-172: SQLite to Postgres migration rehearsal with dual-write, parity and rollback (spike 604 / issue #468)
+ * - phase-173: Vercel preview-environment isolation for data roots, secrets, contracts and cron (spike 603 / issue #467)
  */
 
 export type PhaseFeatureFlag =
+  | "phase-174"
+  | "phase-175"
+  | "phase-176"
+  | "phase-177"
 
   | "phase-66"
   | "phase-77"
   | "phase-78"
   | "phase-79"
+  | "phase-80"
   | "phase-84"
   | "phase-85"
   | "phase-86"
@@ -114,7 +124,6 @@ export type PhaseFeatureFlag =
   | "phase-124"
   | "phase-127"
   | "phase-128"
-  | "phase-128"
   | "phase-130"
   | "phase-131"
   | "phase-132"
@@ -134,6 +143,16 @@ export type PhaseFeatureFlag =
   | "phase-144"
   | "phase-145"
   | "phase-154"
+  | "phase-146"
+  | "phase-147"
+  | "phase-148"
+  | "phase-149"
+  | "phase-150"
+  | "phase-151"
+  | "phase-152"
+  | "phase-153"
+  | "phase-editions"
+  | "phase-timed-drops"
   | "phase-158"
   | "phase-159"
   | "phase-160"
@@ -150,13 +169,22 @@ export type PhaseFeatureFlag =
   | "phase-175"
   | "phase-176"
   | "phase-177";
+  | "phase-170"
+  | "phase-171"
+  | "phase-172"
+  | "phase-173";
 
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
+  "phase-174": ["NEXT_PUBLIC_FEATURE_PHASE_174", "FEATURE_PHASE_174"],
+  "phase-175": ["NEXT_PUBLIC_FEATURE_PHASE_175", "FEATURE_PHASE_175"],
+  "phase-176": ["NEXT_PUBLIC_FEATURE_PHASE_176", "FEATURE_PHASE_176"],
+  "phase-177": ["NEXT_PUBLIC_FEATURE_PHASE_177", "FEATURE_PHASE_177"],
   "phase-66": ["NEXT_PUBLIC_FEATURE_PHASE_66", "FEATURE_PHASE_66"],
   "phase-77": ["NEXT_PUBLIC_FEATURE_PHASE_77", "FEATURE_PHASE_77"],
   "phase-78": ["NEXT_PUBLIC_FEATURE_PHASE_78", "FEATURE_PHASE_78"],
   "phase-79": ["NEXT_PUBLIC_FEATURE_PHASE_79", "FEATURE_PHASE_79"],
+  "phase-80": ["NEXT_PUBLIC_FEATURE_PHASE_80", "FEATURE_PHASE_80"],
   "phase-84": ["NEXT_PUBLIC_FEATURE_PHASE_84", "FEATURE_PHASE_84"],
   "phase-85": ["NEXT_PUBLIC_FEATURE_PHASE_85", "FEATURE_PHASE_85"],
   "phase-86": ["NEXT_PUBLIC_FEATURE_PHASE_86", "FEATURE_PHASE_86"],
@@ -212,6 +240,16 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-144": ["NEXT_PUBLIC_FEATURE_PHASE_144", "FEATURE_PHASE_144"],
   "phase-145": ["NEXT_PUBLIC_FEATURE_PHASE_145", "FEATURE_PHASE_145"],
   "phase-154": ["NEXT_PUBLIC_FEATURE_PHASE_154", "FEATURE_PHASE_154"],
+  "phase-146": ["NEXT_PUBLIC_FEATURE_PHASE_146", "FEATURE_PHASE_146"],
+  "phase-147": ["NEXT_PUBLIC_FEATURE_PHASE_147", "FEATURE_PHASE_147"],
+  "phase-148": ["NEXT_PUBLIC_FEATURE_PHASE_148", "FEATURE_PHASE_148"],
+  "phase-149": ["NEXT_PUBLIC_FEATURE_PHASE_149", "FEATURE_PHASE_149"],
+  "phase-150": ["NEXT_PUBLIC_FEATURE_PHASE_150", "FEATURE_PHASE_150"],
+  "phase-151": ["NEXT_PUBLIC_FEATURE_PHASE_151", "FEATURE_PHASE_151"],
+  "phase-152": ["NEXT_PUBLIC_FEATURE_PHASE_152", "FEATURE_PHASE_152"],
+  "phase-153": ["NEXT_PUBLIC_FEATURE_PHASE_153", "FEATURE_PHASE_153"],
+  "phase-editions": ["NEXT_PUBLIC_FEATURE_PHASE_EDITIONS", "FEATURE_PHASE_EDITIONS"],
+  "phase-timed-drops": ["NEXT_PUBLIC_FEATURE_PHASE_TIMED_DROPS", "FEATURE_PHASE_TIMED_DROPS"],
   "phase-158": ["NEXT_PUBLIC_FEATURE_PHASE_158", "FEATURE_PHASE_158"],
   "phase-159": ["NEXT_PUBLIC_FEATURE_PHASE_159", "FEATURE_PHASE_159"],
   "phase-160": ["NEXT_PUBLIC_FEATURE_PHASE_160", "FEATURE_PHASE_160"],
@@ -228,6 +266,10 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-175": ["NEXT_PUBLIC_FEATURE_PHASE_175", "FEATURE_PHASE_175"],
   "phase-176": ["NEXT_PUBLIC_FEATURE_PHASE_176", "FEATURE_PHASE_176"],
   "phase-177": ["NEXT_PUBLIC_FEATURE_PHASE_177", "FEATURE_PHASE_177"],
+  "phase-170": ["NEXT_PUBLIC_FEATURE_PHASE_170", "FEATURE_PHASE_170"],
+  "phase-171": ["NEXT_PUBLIC_FEATURE_PHASE_171", "FEATURE_PHASE_171"],
+  "phase-172": ["NEXT_PUBLIC_FEATURE_PHASE_172", "FEATURE_PHASE_172"],
+  "phase-173": ["NEXT_PUBLIC_FEATURE_PHASE_173", "FEATURE_PHASE_173"],
 };
 
 
@@ -240,6 +282,14 @@ function isTruthy(v: string | undefined): boolean {
 }
 
 export function isFeatureEnabled(flag: PhaseFeatureFlag): boolean {
+  // Next.js only inlines public environment values accessed by literal key.
+  const newFlags: Partial<Record<PhaseFeatureFlag, string | undefined>> = {
+    "phase-174": process.env.NEXT_PUBLIC_FEATURE_PHASE_174,
+    "phase-175": process.env.NEXT_PUBLIC_FEATURE_PHASE_175,
+    "phase-176": process.env.NEXT_PUBLIC_FEATURE_PHASE_176,
+    "phase-177": process.env.NEXT_PUBLIC_FEATURE_PHASE_177,
+  };
+  if (isTruthy(newFlags[flag])) return true;
   // Public keys are checked first so the same helper works in browser and server code.
   const keys = FLAG_ENV_MAP[flag] ?? [
     `NEXT_PUBLIC_FEATURE_${flag.replace(/-/g, "_").toUpperCase()}`,
@@ -270,6 +320,7 @@ export function featureFlagEnvKeys(flag: PhaseFeatureFlag): string[] {
 export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
   // Keep enumeration explicit so dashboards have stable, reviewable flag order.
   const all: PhaseFeatureFlag[] = [
+    "phase-174", "phase-175", "phase-176", "phase-177",
     "phase-66",
     "phase-77",
     "phase-78",
@@ -323,6 +374,16 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-144",
     "phase-145",
     "phase-154",
+    "phase-146",
+    "phase-147",
+    "phase-148",
+    "phase-149",
+    "phase-150",
+    "phase-151",
+    "phase-152",
+    "phase-153",
+    "phase-editions",
+    "phase-timed-drops",
     "phase-158",
     "phase-159",
     "phase-160",
@@ -339,6 +400,10 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-175",
     "phase-176",
     "phase-177",
+    "phase-170",
+    "phase-171",
+    "phase-172",
+    "phase-173",
   ];
 
   // Filtering is evaluated at call time, allowing runtime test overrides.

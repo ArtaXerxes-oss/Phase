@@ -20,7 +20,9 @@
     "start": "next start",
     "security:audit": "npm audit --audit-level=high",
     "security:secret-rotation": "tsx scripts/check-secret-rotation.ts",
-    "migrate:sqlite": "tsx scripts/migrate-json-to-sqlite.ts"
+    "migrate:sqlite": "tsx scripts/migrate-json-to-sqlite.ts",
+    "backup:drill": "tsx scripts/backup-drill.ts",
+    "db:parity": "tsx scripts/db-parity.ts"
   },
   "dependencies": {
     "@albedo-link/intent": "0.12.0",
@@ -95,6 +97,9 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^3.2.7",
+    "dotenv": "^16.6.1",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.2",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "tsx": "^4.21.0",

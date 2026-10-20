@@ -280,7 +280,7 @@ hook in `app/signals/[id]/use-signal-crdt.ts` posts on a short debounce and
 polls while the panel is open.
 
 **Metrics.** `lib/signal-version-metrics.ts` keeps process-local counters for
-`signal_version_conflicts` (split by `edit` / `put` / `upvote` / `reply`, and
+`signal_version_conflicts` (split by `edit` / `put` / `upvote` / `reply` / `vote`, and
 flagged separately when a CAS retry was attempted) plus `signal_crdt_merges`,
 `signal_crdt_concurrent_merges` and commit outcomes. The store is the only place
 that increments them, so a rejected CAS is counted once no matter how many layers
@@ -419,6 +419,11 @@ NEXT_PUBLIC_FEATURE_PHASE_158=1
 NEXT_PUBLIC_FEATURE_PHASE_159=1
 NEXT_PUBLIC_FEATURE_PHASE_160=1
 NEXT_PUBLIC_FEATURE_PHASE_161=1
+# Spikes 603/604/605/606 (issues #467/#468/#469/#470)
+NEXT_PUBLIC_FEATURE_PHASE_170=1
+NEXT_PUBLIC_FEATURE_PHASE_171=1
+NEXT_PUBLIC_FEATURE_PHASE_172=1
+NEXT_PUBLIC_FEATURE_PHASE_173=1
 # Server-only aliases also accepted: FEATURE_PHASE_104, etc.
 ```
 
@@ -479,7 +484,7 @@ Contract commands are documented in [`contracts/README.md`](../contracts/README.
 `.github/workflows/ci.yml` runs on every PR and push to `main`:
 
 - `contracts` — compiles and tests both Soroban crates (`mock-token`, `phase-protocol`) against `wasm32-unknown-unknown`.
-- `web` — `npm run lint`, `npm run typecheck` (both currently non-blocking pending a cleanup of pre-existing errors — see the job for the tracked count), and `npm run build`.
+- `web` — `npm run lint` (non-blocking: 286 pre-existing errors), `npm run typecheck` and `npm test` (both blocking), and `npm run build`.
 - `deploy-staging` — on push to `main` only, behind a `staging` GitHub environment: builds + optimizes `phase-protocol` and runs `scripts/deploy-phase-sep50.ts` against testnet using repo secrets/vars.
 
 ---
@@ -695,7 +700,9 @@ Flag: `phase-169` (`NEXT_PUBLIC_FEATURE_PHASE_169` / `FEATURE_PHASE_169`). Defau
 - Audit counters: `ledger_clear_signing_reviewed`, `ledger_clear_signing_approved`, `ledger_clear_signing_rejected`, `ledger_blind_signing_blocked`, `ledger_gate13_preempted` in `lib/security-counters.ts`.
 - Routes: `POST /api/wallet/ledger` for clear-signing lifecycle telemetry.
 
+## 20. Log pipeline: redaction, sampling and external sink (spike 606)
 
+Flag: `phase-170` (`NEXT_PUBLIC_FEATURE_PHASE_170` / `FEATURE_PHASE_170`). Default off. See `PROJECT_ARCHITECTURE.md` §10 and `docs/spikes/606-log-pipeline-findings.md`.
 
 
 ## 20. A/B experimentation framework (spike 612)
@@ -734,3 +741,42 @@ Flag: `phase-177` (`NEXT_PUBLIC_FEATURE_PHASE_177` / `FEATURE_PHASE_177`). Defau
 - `lib/forge/billing.ts`: Per-wallet UTC-day metering in `forge-billing.json` (wallets hashed; bounded 5,000 wallet-days / 200 jobs per day). Idempotent by `jobId` so serverless retries cannot double-count. Tier limits from `PHASE_FORGE_BILLING_TIERS` JSON (defaults standard 5 … obsidian 100); invalid config fails safe to defaults.
 - Enforcement: `agent/forge` checks quota before settle (no wasted payment); `forge-agent` checks after settlement verification (replay fence first) and refuses with `429 FORGE_QUOTA_EXCEEDED` + `Retry-After` (seconds to UTC-day reset, floor 60). Accepted jobs are metered and book `chargeSurfaceCost("forge", 20)` against the spike-614 budget.
 - Findings: `docs/spikes/615-forge-billing-metering-findings.md`.
+- `lib/log-pipeline.ts`: `redactLogValue` (masks `S...` seeds and secret-named keys such as `rawPayload`, `errorResult`, `authorization`; cycle/depth safe), `shouldSampleLog` (warn/error always kept, info sampled by FNV hash of the correlation id so a request is kept or dropped whole), `toPipelineRecord` (only `level`, `event`, `route`, `method`, `status_class` are labels; wallets, CIDs, token ids, hashes stay unindexed in `fields`), and `LogPipeline` (bounded buffer, drop-oldest, single-flight flush, abort timeout, at-most-once delivery).
+- `lib/api-observability.ts`: every `log()` goes through `emitLog`, so the console line is redacted too when the flag is on.
+- Env: `LOG_SINK_URL` (https only, validated in `serverEnvSchema`), `LOG_SINK_TOKEN`, `LOG_SAMPLE_RATE_INFO` (0..1, default 0.1), `LOG_SINK_BATCH_SIZE`, `LOG_SINK_MAX_BUFFER`, `LOG_SINK_FLUSH_MS`, `LOG_SINK_TIMEOUT_MS`.
+- Counters (`lib/security-counters.ts`): `log_pipeline_enqueued`, `_sampled_out`, `_dropped`, `_redacted`, `_flush_ok`, `_flush_failed`.
+- Not covered: `waitUntil`-style flush on serverless freeze, counter export, migrating ad-hoc `console.*` callers.
+
+## 21. Backup and disaster recovery (spike 605)
+
+Flag: `phase-171` (`NEXT_PUBLIC_FEATURE_PHASE_171` / `FEATURE_PHASE_171`). Default off. See `docs/spikes/605-backup-dr-findings.md`.
+
+- `lib/backup-snapshot.ts`: `createSnapshot` locks every sidecar path (sorted, via `withFileLock`) and takes the SQLite image with `VACUUM INTO`, so the set and the database share one logical instant and no WAL copy is involved; a corrupt sidecar fails the snapshot. `verifySnapshot` re-hashes, parses JSON, runs `integrity_check` and `foreign_key_check`, and compares per-table row counts. `restoreSnapshot` verifies first, removes stale `-wal`/`-shm`, writes tmp+rename, and holds `.restore-in-progress` (stale after 10 min).
+- `app/api/cron/faucet-health/route.ts`: returns `503` + `Retry-After: 60` while the marker is fresh, so a refill cannot run against half-restored distributor state.
+- Secrets: never written to a snapshot. `sealSecrets`/`openSecrets` use AES-256-GCM with a scrypt key (passphrase ≥ 16 chars); failures never echo plaintext; `diffSecretsMap` reports drift by name only.
+- `lib/server-data-paths.ts`: `serverDataRoot`, `serverDataFileKeys`, `serverDataFileName` exported so backups cannot drift from the file table.
+- Drill: `npm run backup:drill` (snapshot → verify → restore to scratch → SQLite parity).
+- Restore replaces the database file: close the connection (`resetDbForTests`) and run offline for the live root.
+- Counters: `backup_snapshot_created|verified|corrupt`, `backup_restore_completed|blocked`.
+
+## 22. SQLite to Postgres migration rehearsal (spike 604)
+
+Flag: `phase-172` (`NEXT_PUBLIC_FEATURE_PHASE_172` / `FEATURE_PHASE_172`). Default off. See `docs/spikes/604-postgres-rehearsal-findings.md`.
+
+- `lib/db-parity.ts`: `toPositionalParams`, `sqliteTypeToPostgres` (integer flags stay `BIGINT` so parity compares like with like), `buildPostgresCreateTable`, `buildPostgresUpsert` (explicit conflict target replaces `INSERT OR REPLACE`), `perTestSchemaName`, `compareSources`/`compareTable` (value diffs, `type_coercion`, order-independent checksum), `DualWriter`.
+- Dual-write ordering: primary (SQLite) first and authoritative; secondary is bounded (`maxSecondaryInflight`, default 5) and timed out (1.5 s). Failures, timeouts and shed writes land in `driftLog()` and never throw. `setMode("primary-only")` is the rollback.
+- `PHASE_DATABASE_URL` + flag → `dual`; otherwise `primary-only`.
+- Check two databases with `npm run db:parity -- <left> <right>`.
+- Counters: `db_parity_checked`, `db_parity_mismatch`, `db_dual_write_ok|drift|shed`.
+- Not covered: a `pg` driver, async re-plumbing of the `MAX_CAS_ATTEMPTS` loops, advisory locks replacing `fileQueues`, pool storm testing.
+
+## 23. Preview environment isolation (spike 603)
+
+Flag: `phase-173` (`NEXT_PUBLIC_FEATURE_PHASE_173` / `FEATURE_PHASE_173`). Default off. See `docs/spikes/603-preview-isolation-findings.md`.
+
+- `lib/preview-isolation.ts`: `resolvePreviewId` (`pr-<n>` from `VERCEL_GIT_PULL_REQUEST_ID`, else `br-<slug>-<hash>`; always one safe path segment), `checkPreviewIsolation`, `isCronBlockedInPreview`, `previewTrustsVercelCronHeader`. The module has no `node:*` imports because `lib/env-validation.ts` reaches client bundles through `phase-protocol.ts`.
+- `lib/server-data-paths.ts`: in a preview the root becomes `<root>/previews/<id>`.
+- `lib/env-validation.ts`: `validatePhaseEnv` reports `isolation_violation` for a preview that resolves to the production issuer (public key or derived from `CLASSIC_LIQ_ISSUER_SECRET`), reuses the production cron secret, uses a production contract ID, or sets `STELLAR_NETWORK=mainnet`. Production identity is declared with `PHASE_PROD_ISSUER`, `PHASE_PROD_CRON_SECRET_SHA256`, `PHASE_PROD_CONTRACT_IDS`; messages never contain secret values.
+- `app/api/cron/faucet-health/route.ts`: preview runs return `{ skipped: "preview_cron_disabled" }` unless `PHASE_PREVIEW_CRON_ENABLED=1`; the unauthenticated-header shortcut is disabled in previews.
+- Caveat: Vercel `/tmp` is per-instance, so namespacing prevents cross-preview bleed, not loss between instances.
+- Counters: `preview_isolation_violation`, `preview_cron_blocked`.

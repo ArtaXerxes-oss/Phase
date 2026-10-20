@@ -1,3 +1,5 @@
+import { complianceGate } from "@/lib/compliance"
+import { isFeatureEnabled } from "@/lib/feature-flags"
 import { NextRequest, NextResponse } from "next/server"
 import { REQUIRED_AMOUNT } from "@/lib/phase-protocol"
 import { isSettlementUsed } from "@/lib/settlement-store"
@@ -33,6 +35,9 @@ function isMaisonedPayment(payload: LocalX402Token | null, requiredStroops: stri
 }
 
 export async function POST(request: NextRequest) {
+  if (isFeatureEnabled("phase-176") && process.env.PHASE_KYC_MODE === "live") {
+    return NextResponse.json({ code: "DEMO_SHIM_FORBIDDEN" }, { status: 503 })
+  }
   if (!localShimEnabled()) {
     return NextResponse.json({ error: "x402 local shim disabled" }, { status: 503 })
   }
@@ -45,6 +50,9 @@ export async function POST(request: NextRequest) {
     // Spike 612: variant-aware floor when the caller supplies the payer; control otherwise.
     const requiredStroops = (await resolveForgeRequiredAmountStroops(body.user_address?.trim())).amountStroops
     const verified = isMaisonedPayment(payload, requiredStroops)
+    const block = await complianceGate(body.user_address ?? "", String(payload?.amount ?? ""), "x402")
+    if (block) return block
+    const verified = isMaisonedPayment(payload)
 
     if (verified && typeof payload?.invoice === 'string') {
       const used = await isSettlementUsed(payload.invoice)
