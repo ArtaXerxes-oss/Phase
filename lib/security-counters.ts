@@ -117,7 +117,16 @@ export type SecurityCounterName =
   | "ledger_clear_signing_approved"
   | "ledger_clear_signing_rejected"
   | "ledger_blind_signing_blocked"
-  | "ledger_gate13_preempted";
+  | "ledger_gate13_preempted"
+  | "deep_link_rejected"
+  | "deep_link_resolved"
+  | "compliance_allowed"
+  | "compliance_denied"
+  | "compliance_unavailable"
+  | "compliance_webhook_replay"
+  | "tax_event_recorded"
+  | "tax_exported"
+  | "market_accept_conflict";
 
 
 const counters = new Map<SecurityCounterName, number>()

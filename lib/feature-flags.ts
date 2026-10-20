@@ -70,6 +70,10 @@
  */
 
 export type PhaseFeatureFlag =
+  | "phase-174"
+  | "phase-175"
+  | "phase-176"
+  | "phase-177"
 
   | "phase-66"
   | "phase-77"
@@ -160,6 +164,10 @@ export type PhaseFeatureFlag =
 
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
+  "phase-174": ["NEXT_PUBLIC_FEATURE_PHASE_174", "FEATURE_PHASE_174"],
+  "phase-175": ["NEXT_PUBLIC_FEATURE_PHASE_175", "FEATURE_PHASE_175"],
+  "phase-176": ["NEXT_PUBLIC_FEATURE_PHASE_176", "FEATURE_PHASE_176"],
+  "phase-177": ["NEXT_PUBLIC_FEATURE_PHASE_177", "FEATURE_PHASE_177"],
   "phase-66": ["NEXT_PUBLIC_FEATURE_PHASE_66", "FEATURE_PHASE_66"],
   "phase-77": ["NEXT_PUBLIC_FEATURE_PHASE_77", "FEATURE_PHASE_77"],
   "phase-78": ["NEXT_PUBLIC_FEATURE_PHASE_78", "FEATURE_PHASE_78"],
@@ -258,6 +266,14 @@ function isTruthy(v: string | undefined): boolean {
 }
 
 export function isFeatureEnabled(flag: PhaseFeatureFlag): boolean {
+  // Next.js only inlines public environment values accessed by literal key.
+  const newFlags: Partial<Record<PhaseFeatureFlag, string | undefined>> = {
+    "phase-174": process.env.NEXT_PUBLIC_FEATURE_PHASE_174,
+    "phase-175": process.env.NEXT_PUBLIC_FEATURE_PHASE_175,
+    "phase-176": process.env.NEXT_PUBLIC_FEATURE_PHASE_176,
+    "phase-177": process.env.NEXT_PUBLIC_FEATURE_PHASE_177,
+  };
+  if (isTruthy(newFlags[flag])) return true;
   // Public keys are checked first so the same helper works in browser and server code.
   const keys = FLAG_ENV_MAP[flag] ?? [
     `NEXT_PUBLIC_FEATURE_${flag.replace(/-/g, "_").toUpperCase()}`,
@@ -288,6 +304,7 @@ export function featureFlagEnvKeys(flag: PhaseFeatureFlag): string[] {
 export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
   // Keep enumeration explicit so dashboards have stable, reviewable flag order.
   const all: PhaseFeatureFlag[] = [
+    "phase-174", "phase-175", "phase-176", "phase-177",
     "phase-66",
     "phase-77",
     "phase-78",

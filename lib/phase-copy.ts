@@ -247,9 +247,48 @@ const PHASE_HOST_CONTRACT_UNKNOWN_EN =
 const PHASE_HOST_CONTRACT_UNKNOWN_ES =
   "Error de host en contrato PHASE #{code}. Ver contracts/phase-protocol (PhaseError) o el diagnóstico completo del host."
 
+export type IntegrationCopy = {
+  actionFailed: string
+  actionConflict: string
+  requirementsNotMet: string
+  rateLimited: string
+  quest: string
+  offer: string
+  buyer: string
+  seller: string
+  offerHint: string
+  claim: string
+  accept: string
+  reject: string
+  completed: string
+  pending: string
+  reviewLink: string
+  reviewLinkHint: string
+  destination: string
+  recipient: string
+  referral: string
+  signingWallet: string
+  connect: string
+  continue: string
+  cancel: string
+  linkError: string
+  mobileControls: string
+  taxTitle: string
+  taxHint: string
+  taxDownload: string
+  taxError: string
+  startDate: string
+  endDate: string
+  policy: string
+  kycRequired: string
+  sanctionsBlocked: string
+  screeningUnavailable: string
+}
+
 export const phaseCopy: Record<
   AppLang,
   {
+    integrations: IntegrationCopy
     nav: { home: string; market: string; forge: string; chamber: string; lang: string }
     dashboard: {
       title: string
@@ -734,50 +773,50 @@ export const phaseCopy: Record<
     pricing: PricingCopy
     moderationQueue: ModerationQueueCopy
     questArcs: QuestArcCopy
-    qrFlows: {
-      receiveTitle: string
-      scanTitle: string
-      shareReferral: string
-      scanPrompt: string
-      copyUri: string
-      copied: string
-      requestAmount: string
-      scanQr: string
-      viewQr: string
-      manualEntry: string
-      cameraError: string
-    }
-    walletConnectResilience: {
-      title: string
-      reconnectPrompt: string
-      chainMismatch: string
-      openMobileWallet: string
-      relayDisconnected: string
-      reconnectedToast: string
-    }
-    xbullParity: {
-      badge: string
-      signPrompt: string
-      trustlinePrompt: string
-      rejected: string
-      networkMismatch: string
-    }
-    ledgerClearSigning: {
-      title: string
-      description: string
-      targetContract: string
-      hostFunction: string
-      verificationCode: string
-      matchCodePrompt: string
-      acknowledgePrompt: string
-      approveButton: string
-      cancelButton: string
-      blindSigningDisabled: string
-      gate13RiskAlert: string
-    }
+    qrFlows: Record<"receiveTitle" | "scanTitle" | "shareReferral" | "scanPrompt" | "copyUri" | "copied" | "requestAmount" | "scanQr" | "viewQr" | "manualEntry" | "cameraError", string>
+    walletConnectResilience: Record<"title" | "reconnectPrompt" | "chainMismatch" | "openMobileWallet" | "relayDisconnected" | "reconnectedToast", string>
+    xbullParity: Record<"badge" | "signPrompt" | "trustlinePrompt" | "rejected" | "networkMismatch", string>
+    ledgerClearSigning: Record<"title" | "description" | "targetContract" | "hostFunction" | "verificationCode" | "matchCodePrompt" | "acknowledgePrompt" | "approveButton" | "cancelButton" | "blindSigningDisabled" | "gate13RiskAlert", string>
   }
 > = {
   en: {
+    integrations: {
+      "actionFailed": "The request failed. Your input is preserved; retry when ready.",
+      "actionConflict": "This request is already pending or its state has changed. Refresh the status before retrying.",
+      "requirementsNotMet": "Complete the quest requirements and add the required trustline before claiming.",
+      "rateLimited": "Too many requests. Wait before retrying.",
+      "quest": "Quest",
+      "offer": "Offer",
+      "buyer": "Buyer",
+      "seller": "Seller",
+      "offerHint": "Accepting records the agreement. It does not transfer the NFT or prove an on-chain payment.",
+      "claim": "Claim",
+      "accept": "Accept",
+      "reject": "Reject",
+      "completed": "Completed",
+      "pending": "Transaction pending. Keep this screen and retry to verify the outcome.",
+      "reviewLink": "Review incoming link",
+      "reviewLinkHint": "Check the destination and full recipient address. Continuing opens the requested screen; transactions always require a separate wallet confirmation.",
+      "destination": "Destination",
+      "recipient": "Suggested recipient (untrusted)",
+      "referral": "Referral code (untrusted)",
+      "signingWallet": "Connected wallet",
+      "connect": "Connect wallet",
+      "continue": "Continue",
+      "cancel": "Cancel",
+      "linkError": "This link is invalid, expired, or unavailable.",
+      "mobileControls": "Chamber controls",
+      "taxTitle": "Transaction export",
+      "taxHint": "Testnet records only. Missing basis and FX remain blank; unverified trades are flagged. This is not a tax form or tax advice.",
+      "taxDownload": "Download CSV",
+      "taxError": "Export failed. Check your wallet signature and try again.",
+      "startDate": "From (UTC)",
+      "endDate": "To (UTC, exclusive)",
+      "policy": "Lot policy",
+      "kycRequired": "Identity verification is required for this amount.",
+      "sanctionsBlocked": "This wallet cannot use this service.",
+      "screeningUnavailable": "Screening is unavailable. Try again later."
+    },
     nav: {
       home: "← Home",
       market: "Market",
@@ -1435,6 +1474,43 @@ export const phaseCopy: Record<
 
 
   es: {
+    integrations: {
+      "actionFailed": "Falló la solicitud. Conservamos los datos; reintentá cuando puedas.",
+      "actionConflict": "La solicitud está pendiente o cambió de estado. Actualizá el estado antes de reintentar.",
+      "requirementsNotMet": "Completá los requisitos de la misión y agregá la línea de confianza antes de reclamar.",
+      "rateLimited": "Demasiadas solicitudes. Esperá antes de reintentar.",
+      "quest": "Misión",
+      "offer": "Oferta",
+      "buyer": "Comprador",
+      "seller": "Vendedor",
+      "offerHint": "Aceptar registra el acuerdo. No transfiere el NFT ni demuestra un pago en cadena.",
+      "claim": "Reclamar",
+      "accept": "Aceptar",
+      "reject": "Rechazar",
+      "completed": "Completado",
+      "pending": "Transacción pendiente. Conservá la pantalla y reintentá para verificar el resultado.",
+      "reviewLink": "Revisar enlace entrante",
+      "reviewLinkHint": "Verificá el destino y la dirección completa. Continuar abre la pantalla solicitada; las transacciones requieren otra confirmación en la billetera.",
+      "destination": "Destino",
+      "recipient": "Destinatario sugerido (no verificado)",
+      "referral": "Código de referido (no verificado)",
+      "signingWallet": "Billetera conectada",
+      "connect": "Conectar billetera",
+      "continue": "Continuar",
+      "cancel": "Cancelar",
+      "linkError": "Este enlace no es válido, venció o no está disponible.",
+      "mobileControls": "Controles de la cámara",
+      "taxTitle": "Exportar transacciones",
+      "taxHint": "Solo registros de testnet. Base y cambio desconocidos quedan vacíos; operaciones no verificadas se marcan. No es un formulario ni asesoramiento fiscal.",
+      "taxDownload": "Descargar CSV",
+      "taxError": "Falló la exportación. Verificá la firma y reintentá.",
+      "startDate": "Desde (UTC)",
+      "endDate": "Hasta (UTC, exclusivo)",
+      "policy": "Política de lotes",
+      "kycRequired": "Este monto requiere verificación de identidad.",
+      "sanctionsBlocked": "Esta billetera no puede usar este servicio.",
+      "screeningUnavailable": "Verificación no disponible. Reintentá más tarde."
+    },
     nav: {
       home: "← Inicio",
       market: "Mercado",

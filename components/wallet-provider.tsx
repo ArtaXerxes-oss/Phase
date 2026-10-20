@@ -39,6 +39,7 @@ import {
   TESTNET_PASSPHRASE,
 } from "@/lib/stellar-wallet-kit"
 import { cn } from "@/lib/utils"
+import { InboundLinkReview } from "@/components/inbound-link-review"
 import { QrCodeDialog } from "@/components/qr-code-dialog"
 import { WalletConnectBanner } from "@/components/walletconnect-banner"
 import { LedgerClearSigningModal } from "@/components/ledger-clear-signing-modal"
@@ -725,8 +726,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // ── render ────────────────────────────────────────────────────────────────
 
   return (
-    <>
-      <WalletContext.Provider value={value}>{children}</WalletContext.Provider>
+    <WalletContext.Provider value={value}>
+      {children}<InboundLinkReview />
 
       <WalletConnectBanner />
 
@@ -736,7 +737,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           role="alert"
           aria-live="assertive"
           /* Spike 627: clear the soft keyboard (visualViewport inset published by lib/freighter-mobile). */
-          style={{ paddingBottom: "calc(0.75rem + var(--phase-keyboard-inset, 0px))" }}
+          style={{ paddingBottom: "calc(max(0.75rem, env(safe-area-inset-bottom)) + var(--phase-keyboard-inset, 0px))" }}
           className={cn(
             "fixed bottom-0 left-0 right-0 z-[400] border-t border-red-500/50 bg-background/95 px-4 py-3 text-sm shadow-lg backdrop-blur-sm",
           )}
@@ -768,7 +769,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         <div
           role="status"
           /* Spike 627: clear the soft keyboard (visualViewport inset published by lib/freighter-mobile). */
-          style={{ paddingBottom: "calc(0.75rem + var(--phase-keyboard-inset, 0px))" }}
+          style={{ paddingBottom: "calc(max(0.75rem, env(safe-area-inset-bottom)) + var(--phase-keyboard-inset, 0px))" }}
           className={cn(
             "fixed bottom-0 left-0 right-0 z-[300] border-t border-cyan-500/40 bg-background/95 px-4 py-3 text-sm shadow-lg backdrop-blur-sm",
           )}
@@ -836,7 +837,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           }}
         />
       )}
-    </>
+    </WalletContext.Provider>
   )
 
 }

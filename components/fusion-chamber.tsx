@@ -2,6 +2,8 @@
 
 import { albedoImplicitTxAllowed, isAlbedoSelectedInKit } from "@/lib/albedo-intent-client"
 import { albedoRetiredSignMessage, isAlbedoRetired } from "@/lib/albedo-sunset"
+import { useMobileViewport, useMobileDialogFocus } from "@/hooks/use-mobile"
+import { MobileControls } from "@/components/mobile-controls"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
@@ -111,6 +113,7 @@ function formatPowerBp(bp: number) {
 
 
 export function FusionChamber() {
+  useMobileViewport()
   const router = useRouter()
   const { lang } = useLang()
   const ch = pickCopy(lang).chamber
@@ -158,6 +161,7 @@ export function FusionChamber() {
   const [claimToWalletBusy, setClaimToWalletBusy] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
   const [operatorModalOpen, setOperatorModalOpen] = useState(false)
+  useMobileDialogFocus(operatorModalOpen, '[aria-labelledby="chamber-operator-heading"]')
   const [collectionInfo, setCollectionInfo] = useState<CollectionInfo | null>(null)
   const [collectionLoadState, setCollectionLoadState] = useState<"idle" | "loading" | "done">("idle")
   /** `image` parseado de `token_uri` on-chain (colección 0 o refuerzo). */
@@ -1471,6 +1475,7 @@ export function FusionChamber() {
 
   return (
     <div
+      data-mobile-layout={isFeatureEnabled("phase-174") || undefined}
       className="tactical-command-root tactical-command-root--chamber tactical-command-root--cockpit tactical-command-root--stable fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-black font-mono text-foreground"
       suppressHydrationWarning
     >
@@ -1568,7 +1573,7 @@ export function FusionChamber() {
         suppressHydrationWarning
       >
         {/* STATUS_MONITOR */}
-        <aside
+        <MobileControls><aside
           className={cn(
             "tactical-cockpit-aside tactical-chamber-aside relative z-[102] flex h-full min-h-0 flex-col overflow-hidden border-zinc-800/90 bg-zinc-950/25 p-3 sm:p-4",
             "max-md:max-h-[min(36dvh,300px)] max-md:overflow-y-auto max-md:overscroll-contain max-md:border-b max-md:border-zinc-800 md:border-r",
@@ -1844,7 +1849,7 @@ export function FusionChamber() {
               </p>
             </div>
           ) : null}
-        </aside>
+        </aside></MobileControls>
 
         {/* THE_REACTOR */}
         <main className="tactical-cockpit-stage relative z-[102] flex min-h-0 flex-1 flex-col overflow-hidden max-lg:border-b max-lg:border-zinc-800/80">

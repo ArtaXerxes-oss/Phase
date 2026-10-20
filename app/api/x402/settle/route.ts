@@ -1,3 +1,5 @@
+import { complianceGate } from "@/lib/compliance"
+import { isFeatureEnabled } from "@/lib/feature-flags"
 import { NextRequest, NextResponse } from "next/server"
 import { REQUIRED_AMOUNT, tokenContractIdForServer } from "@/lib/phase-protocol"
 
@@ -33,6 +35,9 @@ function isSatisfiedPayment(payload: LocalX402Token | null): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  if (isFeatureEnabled("phase-176") && process.env.PHASE_KYC_MODE === "live") {
+    return NextResponse.json({ code: "DEMO_SHIM_FORBIDDEN" }, { status: 503 })
+  }
   if (!localShimEnabled()) {
     return NextResponse.json({ error: "x402 local shim disabled" }, { status: 503 })
   }
@@ -45,6 +50,8 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = decodeX402Token(token)
+    const block = await complianceGate(body.user_address ?? "", String(payload?.amount ?? ""), "x402")
+    if (block) return block
     if (!isSatisfiedPayment(payload)) {
       return NextResponse.json({ error: "Invalid or insufficient x402 payment token" }, { status: 401 })
     }

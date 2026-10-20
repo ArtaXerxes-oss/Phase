@@ -56,6 +56,7 @@ declare module '@creit.tech/stellar-wallets-kit' {
     static getNetwork(): Promise<{ network: string; networkPassphrase: string }>;
     static sign(xdr: string, options?: any): Promise<{ result: string }>;
     static signTransaction(xdr: string, options?: any): Promise<{ signedTxXdr: string }>;
+    static signMessage(message: string, options?: { address?: string; networkPassphrase?: string }): Promise<{ signedMessage: string; signerAddress?: string }>;
     static signAuthEntry(entry: string, options?: any): Promise<{ signedAuthEntry: string }>;
     static signBlob(blob: string, options?: any): Promise<{ signedBlob: string }>;
     static getSupportedWallets(): any[];

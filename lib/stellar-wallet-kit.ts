@@ -28,7 +28,6 @@ import {
   validateLedgerPreflight,
   mapLedgerHardwareError,
 } from "@/lib/ledger-soroban-decoder"
-import { albedoRetiredSignMessage, isAlbedoRetired } from "@/lib/albedo-sunset"
 
 
 let initialized = false
@@ -50,8 +49,7 @@ const WC_PROJECT_ID =
 
 function generatePostMessageNonce(): string {
   if (typeof window === "undefined") return ""
-  // Browser-only path: node:crypto has no randomUUID in the client polyfill and crashed every page.
-  const nonce = globalThis.crypto.randomUUID()
+  const nonce = window.crypto.randomUUID()
   try {
     window.localStorage.setItem(LS_POSTMESSAGE_NONCE, nonce)
     window.localStorage.setItem(LS_POSTMESSAGE_ORIGIN, window.location.origin)

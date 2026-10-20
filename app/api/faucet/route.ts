@@ -1,3 +1,5 @@
+import { recordTaxEvent } from "@/lib/tax-report"
+import { complianceGate } from "@/lib/compliance"
 import { NextRequest, NextResponse } from "next/server"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -86,7 +88,7 @@ type WalletClaims = {
   dailyAt?: number
   quests?: Record<string, number>
   /** Mint ya enviado; reutilizamos el hash para seguir el poll sin reenviar (serverless timeout). */
-  faucetPending?: { hash: string; reward: RewardType; at: number }
+  faucetPending?: { hash: string; reward: RewardType; at: number; amountStroops?: string; tokenContract?: string }
 }
 
 type FaucetClaims = Record<string, WalletClaims>
@@ -147,30 +149,28 @@ function claimsFilePath() {
  * Wraps file I/O in withFileLock to serialize overlapping POSTs to same wallet.
  */
 async function readClaims(): Promise<FaucetClaims> {
-  return withFileLock(claimsFilePath(), async () => {
-    try {
-      const raw = await readFile(claimsFilePath(), "utf8")
-      const parsed = JSON.parse(raw) as Record<string, number | WalletClaims>
-      if (!parsed || typeof parsed !== "object") return {}
-      const normalized: FaucetClaims = {}
-      for (const [wallet, value] of Object.entries(parsed)) {
-        if (typeof value === "number") {
-          normalized[wallet] = { genesisAt: value }
-          continue
-        }
-        if (!value || typeof value !== "object") continue
-        const fp = value.faucetPending
-        let faucetPending: WalletClaims["faucetPending"]
-        if (fp && typeof fp === "object" && typeof fp.hash === "string" && typeof fp.at === "number") {
-          const r = await parseRewardType(fp.reward)
-          faucetPending = { hash: fp.hash, reward: r, at: fp.at }
-        }
-        normalized[wallet] = {
-          genesisAt: typeof value.genesisAt === "number" ? value.genesisAt : undefined,
-          dailyAt: typeof value.dailyAt === "number" ? value.dailyAt : undefined,
-          quests: value.quests && typeof value.quests === "object" ? value.quests : {},
-          faucetPending,
-        }
+  try {
+    const raw = await readFile(claimsFilePath(), "utf8")
+    const parsed = JSON.parse(raw) as Record<string, number | WalletClaims>
+    if (!parsed || typeof parsed !== "object") return {}
+    const normalized: FaucetClaims = {}
+    for (const [wallet, value] of Object.entries(parsed)) {
+      if (typeof value === "number") {
+        normalized[wallet] = { genesisAt: value }
+        continue
+      }
+      if (!value || typeof value !== "object") continue
+      const fp = value.faucetPending
+      let faucetPending: WalletClaims["faucetPending"]
+      if (fp && typeof fp === "object" && typeof fp.hash === "string" && typeof fp.at === "number") {
+        const r = await parseRewardType(fp.reward)
+        faucetPending = { hash: fp.hash, reward: r, at: fp.at, amountStroops: typeof fp.amountStroops === "string" ? fp.amountStroops : undefined, tokenContract: typeof fp.tokenContract === "string" ? fp.tokenContract : undefined }
+      }
+      normalized[wallet] = {
+        genesisAt: typeof value.genesisAt === "number" ? value.genesisAt : undefined,
+        dailyAt: typeof value.dailyAt === "number" ? value.dailyAt : undefined,
+        quests: value.quests && typeof value.quests === "object" ? value.quests : {},
+        faucetPending,
       }
       return normalized
     } catch {
@@ -389,7 +389,8 @@ function abortArcClaim(reward: RewardType) {
   if (holdId) releaseRefill(holdId)
 }
 
-async function markClaim(wallet: string, reward: RewardType, txHash?: string) {
+async function markClaim(wallet: string, reward: RewardType, txHash?: string, amountStroops?: string, occurredAt?: number, tokenContract?: string) {
+  if (txHash && amountStroops && tokenContract) recordTaxEvent({ eventKey: `faucet:${txHash}`, wallet, kind: "reward", asset: tokenContract, amountStroops, txHash, occurredAt: occurredAt ?? Date.now(), verified: true })
   if (txHash) await settleArcClaim(wallet, reward, txHash)
   questProgressCache.delete(wallet)
   const claims = await readClaims()
@@ -691,6 +692,14 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  let approvedAmountStroops = await rewardAmountStroops(reward)
+  if (reward === "daily" && isStreakMultiplierEnabled()) {
+    const streak = await getStreakInfo(userAddress)
+    if (streak.multiplier > 1) approvedAmountStroops = applyStreakMultiplier(approvedAmountStroops, streak.multiplier)
+  }
+  const complianceBlock = await complianceGate(userAddress, approvedAmountStroops, "faucet")
+  if (complianceBlock) return complianceBlock
+
   const trustlineBlock = await preflightClassicTrustlineForMint(userAddress)
   if (trustlineBlock) return trustlineBlock
 
@@ -836,7 +845,7 @@ export async function POST(req: NextRequest) {
       const pendingHash = row.faucetPending.hash
       const out = await pollSubmittedMint(server, pendingHash)
       if (out.outcome === "SUCCESS") {
-        await markClaim(userAddress, reward, pendingHash)
+        await markClaim(userAddress, reward, pendingHash, row.faucetPending.amountStroops, row.faucetPending.at, row.faucetPending.tokenContract)
         let streakInfo: StreakInfo | undefined
         if (reward === "daily") {
           const recorded = await recordDailyClaim(userAddress)
@@ -939,13 +948,7 @@ export async function POST(req: NextRequest) {
     }
     const c = new Contract(tokenId)
     // phase-131: apply streak multiplier to daily reward amount
-    let effectiveAmountStroops = await rewardAmountStroops(reward)
-    if (reward === "daily" && isStreakMultiplierEnabled()) {
-      const streak = await getStreakInfo(userAddress)
-      if (streak.multiplier > 1) {
-        effectiveAmountStroops = applyStreakMultiplier(effectiveAmountStroops, streak.multiplier)
-      }
-    }
+    const effectiveAmountStroops = approvedAmountStroops
     const amountSc = nativeToScVal(BigInt(effectiveAmountStroops), { type: "i128" })
     const tx = new TransactionBuilder(account, {
       fee: BASE_FEE,
@@ -981,13 +984,13 @@ export async function POST(req: NextRequest) {
     liveClaims = await readClaims()
     liveClaims[userAddress] = {
       ...(liveClaims[userAddress] ?? {}),
-      faucetPending: { hash, reward, at: Date.now() },
+      faucetPending: { hash, reward, at: Date.now(), amountStroops: effectiveAmountStroops, tokenContract: tokenId },
     }
     await writeClaims(liveClaims)
 
     const out = await pollSubmittedMint(server, hash)
     if (out.outcome === "SUCCESS") {
-      await markClaim(userAddress, reward, hash)
+      await markClaim(userAddress, reward, hash, effectiveAmountStroops, liveClaims[userAddress].faucetPending?.at, tokenId)
       let streakInfo: StreakInfo | undefined
       if (reward === "daily") {
         const recorded = await recordDailyClaim(userAddress)
