@@ -65,6 +65,7 @@ export async function POST(
 
   // If accepted, mark listing as sold
   let royalty: Awaited<ReturnType<typeof recordRoyaltyPayout>> | null = null
+  let splits: Awaited<ReturnType<typeof recordCollabSplits>> | null = null
   if (action === "accept") {
     if (!atomic) await soldListing(id)
 
@@ -75,6 +76,12 @@ export async function POST(
       } catch (error) {
         console.warn("[phase-143] time-to-sale not stamped:", error)
       }
+    }
+
+    // Spike 674 (flag-gated): N-way fan-out at accept (dust → first payee, idempotent per offer).
+    if (isPhaseCollabSplitsEnabled() && listing.split_payees && listing.split_payees.length > 0) {
+      const computed = computeCollabSplits(offer.amount_phaselq, listing.split_payees)
+      splits = await recordCollabSplits(id, offer.id, computed)
     }
 
     // phase-140: split proceeds with the original creator on a secondary sale.

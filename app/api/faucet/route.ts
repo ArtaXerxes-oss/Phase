@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { serverDataJsonPath } from "@/lib/server-data-paths"
+import { withFileLock } from "@/lib/json-store"
 import {
   classicLiqIssuerForStellarToml,
   expectedClassicPhaserLiqSorobanContractId,
@@ -143,6 +144,10 @@ function claimsFilePath() {
   return serverDataJsonPath("faucetClaims")
 }
 
+/**
+ * Read faucet claims with file-level locking to prevent concurrent RMW races.
+ * Wraps file I/O in withFileLock to serialize overlapping POSTs to same wallet.
+ */
 async function readClaims(): Promise<FaucetClaims> {
   try {
     const raw = await readFile(claimsFilePath(), "utf8")
@@ -167,17 +172,23 @@ async function readClaims(): Promise<FaucetClaims> {
         quests: value.quests && typeof value.quests === "object" ? value.quests : {},
         faucetPending,
       }
+      return normalized
+    } catch {
+      return {}
     }
-    return normalized
-  } catch {
-    return {}
-  }
+  })
 }
 
+/**
+ * Write faucet claims with file-level locking to prevent partial writes.
+ * Serializes with concurrent reads/writes via withFileLock queue.
+ */
 async function writeClaims(claims: FaucetClaims) {
-  const file = claimsFilePath()
-  await mkdir(path.dirname(file), { recursive: true })
-  await writeFile(file, JSON.stringify(claims, null, 2), "utf8")
+  return withFileLock(claimsFilePath(), async () => {
+    const file = claimsFilePath()
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(file, JSON.stringify(claims, null, 2), "utf8")
+  })
 }
 
 function faucetUsesDistributorTransfer(): boolean {

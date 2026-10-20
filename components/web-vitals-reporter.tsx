@@ -2,6 +2,12 @@
 
 import { useEffect } from "react"
 
+declare global {
+  interface Window {
+    dataLayer?: Record<string, unknown>[]
+  }
+}
+
 export interface WebVitalsMetric {
   name: "LCP" | "FID" | "CLS" | "TTFB" | "INP"
   value: number

@@ -204,7 +204,7 @@ export async function getCreatorProfileViewAnalytics(
   return store[creatorWallet] ?? null;
 }
 
-// â”€â”€ Listings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Listings ──────────────────────────────────────────────────────────────────
 // Issue #36: backed by SQLite (indexed on status/listed_at, collection_id,
 // seller_wallet) instead of parsing the full market-listings.json array on
 // every call.
@@ -533,7 +533,7 @@ export async function soldListing(id: string): Promise<Listing | null> {
   return setListingStatus(id, "sold");
 }
 
-// â”€â”€ Offers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Offers ────────────────────────────────────────────────────────────────────
 // Issue #36: backed by SQLite (indexed on listing_id, buyer_wallet, and
 // status+expires_at for expiration scans) instead of a full-array scan.
 // Expiration remains computed lazily on read (matching prior behavior): a
@@ -703,7 +703,7 @@ export async function getOffersByBuyer(
   return rows.map((row) => rowToOffer(row, now));
 }
 
-// â”€â”€ Issue #88 (phase-139): collection-level offer books â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Issue #88 (phase-139): collection-level offer books ────────────────────
 //
 // Buyers previously had to open each token's listing individually to see
 // what it was being offered, and to make a bulk bid across a collection had
@@ -714,7 +714,7 @@ export async function getOffersByBuyer(
 // unchanged, so accept/reject/expiry behave exactly as before).
 //
 // Feature flag: phase-139 (NEXT_PUBLIC_FEATURE_PHASE_139 / FEATURE_PHASE_139)
-// Rollback: unset the flag â†’ the offer-book route returns 404 and bulk bids
+// Rollback: unset the flag → the offer-book route returns 404 and bulk bids
 //           are rejected; per-listing offers (`/api/market/[id]/offers`) are
 //           untouched either way. No data migration to undo.
 
@@ -866,10 +866,10 @@ export async function createBulkOffer(
   return { created, skipped };
 }
 
-// â”€â”€ Issue #89 (phase-140): royalty enforcement on secondary sales â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Issue #89 (phase-140): royalty enforcement on secondary sales ──────────
 //
 // Accepting an offer marked the listing sold but moved no value to the
-// original creator on a resale â€” only the current seller and buyer were
+// original creator on a resale — only the current seller and buyer were
 // party to the transaction. This module computes the creator/seller split
 // for a listing's `royalty_bps` (set at listing time, see `createListing`)
 // and records it as a settlement-ready ledger line at accept time. It is a
@@ -878,7 +878,7 @@ export async function createBulkOffer(
 // creator are the same wallet.
 //
 // Feature flag: phase-140 (NEXT_PUBLIC_FEATURE_PHASE_140 / FEATURE_PHASE_140)
-// Rollback: unset the flag â†’ `createListing`/`app/api/market` stop accepting
+// Rollback: unset the flag → `createListing`/`app/api/market` stop accepting
 //           `creator_wallet`/`royalty_bps`, and offer-accept stops computing
 //           a split (money continues to move 100% to the seller, pre-140
 //           behavior). Existing `royalty_payouts` rows are historical record
@@ -955,7 +955,7 @@ function rowToRoyaltyPayout(row: RoyaltyPayoutRow): RoyaltyPayout {
   };
 }
 
-/** Records a non-zero royalty split for an accepted offer. Callers only invoke this for a secondary sale with `royalty_bps > 0` â€” a primary sale has nothing to record. */
+/** Records a non-zero royalty split for an accepted offer. Callers only invoke this for a secondary sale with `royalty_bps > 0` — a primary sale has nothing to record. */
 export async function recordRoyaltyPayout(
   listing: Pick<Listing, "id" | "seller_wallet" | "creator_wallet">,
   offer_id: string,
@@ -1006,7 +1006,7 @@ export async function getRoyaltyPayoutsForCreator(
   return rows.map(rowToRoyaltyPayout);
 }
 
-// â”€â”€ Issue #103: Mute and Block Primitives (phase-85) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Issue #103: Mute and Block Primitives (phase-85) ─────────────────────────
 
 type BlockedWallet = { wallet: string; blocked_at: number; reason?: string };
 type MutedWallet = { wallet: string; muted_at: number; expires_at?: number };

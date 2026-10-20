@@ -6,6 +6,7 @@
  *
  * Flags:
  * - phase-79: watchlist notifications for price drops
+ * - phase-80: fractional ownership for high-value artifacts (co-ownership, listing, purchase)
  * - phase-88: on-chain follow suggestions
  * - phase-89: scheduled signal broadcast queues
  * - phase-90: community polls as a signal subtype
@@ -62,6 +63,10 @@
  * - phase-167: WalletConnect v2 mobile session resilience with reconnect and chain-switch (spike 623 / issue #486)
  * - phase-168: xBull full support with sign, trustline and Freighter-difference matrix (spike 624 / issue #487)
  * - phase-169: Ledger blind-signing to clear-signing review for Soroban transactions (spike 625 / issue #488)
+ * - phase-170: Albedo retirement-or-parity plan with flagged sunset (spike 626 / issue #489)
+ * - phase-171: Freighter mobile browser support with in-app UA, injection and return flow (spike 627 / issue #490)
+ * - phase-172: biometric unlock for returning wallets with OS-gated session (spike 628 / issue #491)
+ * - phase-173: Horizon-backed per-wallet transaction history timeline (spike 629 / issue #492)
  */
 
 export type PhaseFeatureFlag =
@@ -74,6 +79,7 @@ export type PhaseFeatureFlag =
   | "phase-77"
   | "phase-78"
   | "phase-79"
+  | "phase-80"
   | "phase-84"
   | "phase-85"
   | "phase-86"
@@ -110,7 +116,6 @@ export type PhaseFeatureFlag =
   | "phase-124"
   | "phase-127"
   | "phase-128"
-  | "phase-128"
   | "phase-130"
   | "phase-131"
   | "phase-132"
@@ -130,6 +135,16 @@ export type PhaseFeatureFlag =
   | "phase-144"
   | "phase-145"
   | "phase-154"
+  | "phase-146"
+  | "phase-147"
+  | "phase-148"
+  | "phase-149"
+  | "phase-150"
+  | "phase-151"
+  | "phase-152"
+  | "phase-153"
+  | "phase-editions"
+  | "phase-timed-drops"
   | "phase-158"
   | "phase-159"
   | "phase-160"
@@ -141,7 +156,11 @@ export type PhaseFeatureFlag =
   | "phase-166"
   | "phase-167"
   | "phase-168"
-  | "phase-169";
+  | "phase-169"
+  | "phase-170"
+  | "phase-171"
+  | "phase-172"
+  | "phase-173";
 
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
@@ -153,6 +172,7 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-77": ["NEXT_PUBLIC_FEATURE_PHASE_77", "FEATURE_PHASE_77"],
   "phase-78": ["NEXT_PUBLIC_FEATURE_PHASE_78", "FEATURE_PHASE_78"],
   "phase-79": ["NEXT_PUBLIC_FEATURE_PHASE_79", "FEATURE_PHASE_79"],
+  "phase-80": ["NEXT_PUBLIC_FEATURE_PHASE_80", "FEATURE_PHASE_80"],
   "phase-84": ["NEXT_PUBLIC_FEATURE_PHASE_84", "FEATURE_PHASE_84"],
   "phase-85": ["NEXT_PUBLIC_FEATURE_PHASE_85", "FEATURE_PHASE_85"],
   "phase-86": ["NEXT_PUBLIC_FEATURE_PHASE_86", "FEATURE_PHASE_86"],
@@ -208,6 +228,16 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-144": ["NEXT_PUBLIC_FEATURE_PHASE_144", "FEATURE_PHASE_144"],
   "phase-145": ["NEXT_PUBLIC_FEATURE_PHASE_145", "FEATURE_PHASE_145"],
   "phase-154": ["NEXT_PUBLIC_FEATURE_PHASE_154", "FEATURE_PHASE_154"],
+  "phase-146": ["NEXT_PUBLIC_FEATURE_PHASE_146", "FEATURE_PHASE_146"],
+  "phase-147": ["NEXT_PUBLIC_FEATURE_PHASE_147", "FEATURE_PHASE_147"],
+  "phase-148": ["NEXT_PUBLIC_FEATURE_PHASE_148", "FEATURE_PHASE_148"],
+  "phase-149": ["NEXT_PUBLIC_FEATURE_PHASE_149", "FEATURE_PHASE_149"],
+  "phase-150": ["NEXT_PUBLIC_FEATURE_PHASE_150", "FEATURE_PHASE_150"],
+  "phase-151": ["NEXT_PUBLIC_FEATURE_PHASE_151", "FEATURE_PHASE_151"],
+  "phase-152": ["NEXT_PUBLIC_FEATURE_PHASE_152", "FEATURE_PHASE_152"],
+  "phase-153": ["NEXT_PUBLIC_FEATURE_PHASE_153", "FEATURE_PHASE_153"],
+  "phase-editions": ["NEXT_PUBLIC_FEATURE_PHASE_EDITIONS", "FEATURE_PHASE_EDITIONS"],
+  "phase-timed-drops": ["NEXT_PUBLIC_FEATURE_PHASE_TIMED_DROPS", "FEATURE_PHASE_TIMED_DROPS"],
   "phase-158": ["NEXT_PUBLIC_FEATURE_PHASE_158", "FEATURE_PHASE_158"],
   "phase-159": ["NEXT_PUBLIC_FEATURE_PHASE_159", "FEATURE_PHASE_159"],
   "phase-160": ["NEXT_PUBLIC_FEATURE_PHASE_160", "FEATURE_PHASE_160"],
@@ -220,6 +250,10 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-167": ["NEXT_PUBLIC_FEATURE_PHASE_167", "FEATURE_PHASE_167"],
   "phase-168": ["NEXT_PUBLIC_FEATURE_PHASE_168", "FEATURE_PHASE_168"],
   "phase-169": ["NEXT_PUBLIC_FEATURE_PHASE_169", "FEATURE_PHASE_169"],
+  "phase-170": ["NEXT_PUBLIC_FEATURE_PHASE_170", "FEATURE_PHASE_170"],
+  "phase-171": ["NEXT_PUBLIC_FEATURE_PHASE_171", "FEATURE_PHASE_171"],
+  "phase-172": ["NEXT_PUBLIC_FEATURE_PHASE_172", "FEATURE_PHASE_172"],
+  "phase-173": ["NEXT_PUBLIC_FEATURE_PHASE_173", "FEATURE_PHASE_173"],
 };
 
 
@@ -324,6 +358,16 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-144",
     "phase-145",
     "phase-154",
+    "phase-146",
+    "phase-147",
+    "phase-148",
+    "phase-149",
+    "phase-150",
+    "phase-151",
+    "phase-152",
+    "phase-153",
+    "phase-editions",
+    "phase-timed-drops",
     "phase-158",
     "phase-159",
     "phase-160",
@@ -336,6 +380,10 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-167",
     "phase-168",
     "phase-169",
+    "phase-170",
+    "phase-171",
+    "phase-172",
+    "phase-173",
   ];
 
   // Filtering is evaluated at call time, allowing runtime test overrides.

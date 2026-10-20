@@ -75,7 +75,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function base64ToBytes(b64: string): Uint8Array {
+function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -116,8 +116,8 @@ export async function isPlatformAuthenticatorAvailable(): Promise<boolean> {
  * only derive the key that opens this wallet's envelope (cross-wallet replay
  * fails at decrypt).
  */
-export function buildBiometricChallenge(wallet: string): Uint8Array {
-  return new TextEncoder().encode(`${BIOMETRIC_CHALLENGE_PREFIX}${wallet}`);
+export function buildBiometricChallenge(wallet: string): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(new TextEncoder().encode(`${BIOMETRIC_CHALLENGE_PREFIX}${wallet}`));
 }
 
 /**
@@ -131,7 +131,7 @@ export async function deriveUnlockKey(
 ): Promise<CryptoKey> {
   const bytes =
     assertionSignature instanceof Uint8Array
-      ? assertionSignature
+      ? new Uint8Array(assertionSignature)
       : new Uint8Array(assertionSignature);
   const baseKey = await subtle.importKey("raw", bytes, "HKDF", false, ["deriveKey"]);
   return subtle.deriveKey(
@@ -139,7 +139,7 @@ export async function deriveUnlockKey(
       name: "HKDF",
       hash: "SHA-256",
       salt: buildBiometricChallenge(wallet),
-      info: new TextEncoder().encode("phase-biometric-envelope"),
+      info: new Uint8Array(new TextEncoder().encode("phase-biometric-envelope")),
     },
     baseKey,
     { name: "AES-GCM", length: 256 },
@@ -154,7 +154,7 @@ export async function sealSessionEnvelope(
   subtle: SubtleCrypto = globalThis.crypto.subtle,
 ): Promise<BiometricSessionEnvelope> {
   const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
-  const plaintext = new TextEncoder().encode(JSON.stringify(payload));
+  const plaintext = new Uint8Array(new TextEncoder().encode(JSON.stringify(payload)));
   const ciphertext = await subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
   return {
     v: 1,
