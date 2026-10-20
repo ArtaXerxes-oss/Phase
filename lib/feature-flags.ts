@@ -62,6 +62,10 @@
  * - phase-167: WalletConnect v2 mobile session resilience with reconnect and chain-switch (spike 623 / issue #486)
  * - phase-168: xBull full support with sign, trustline and Freighter-difference matrix (spike 624 / issue #487)
  * - phase-169: Ledger blind-signing to clear-signing review for Soroban transactions (spike 625 / issue #488)
+ * - phase-170: structured log pipeline with redaction, sampling and a batched external sink (spike 606 / issue #470)
+ * - phase-171: backup and disaster-recovery snapshots for sidecars, SQLite and the secrets map (spike 605 / issue #469)
+ * - phase-172: SQLite to Postgres migration rehearsal with dual-write, parity and rollback (spike 604 / issue #468)
+ * - phase-173: Vercel preview-environment isolation for data roots, secrets, contracts and cron (spike 603 / issue #467)
  */
 
 export type PhaseFeatureFlag =
@@ -137,7 +141,11 @@ export type PhaseFeatureFlag =
   | "phase-166"
   | "phase-167"
   | "phase-168"
-  | "phase-169";
+  | "phase-169"
+  | "phase-170"
+  | "phase-171"
+  | "phase-172"
+  | "phase-173";
 
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
@@ -212,6 +220,10 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-167": ["NEXT_PUBLIC_FEATURE_PHASE_167", "FEATURE_PHASE_167"],
   "phase-168": ["NEXT_PUBLIC_FEATURE_PHASE_168", "FEATURE_PHASE_168"],
   "phase-169": ["NEXT_PUBLIC_FEATURE_PHASE_169", "FEATURE_PHASE_169"],
+  "phase-170": ["NEXT_PUBLIC_FEATURE_PHASE_170", "FEATURE_PHASE_170"],
+  "phase-171": ["NEXT_PUBLIC_FEATURE_PHASE_171", "FEATURE_PHASE_171"],
+  "phase-172": ["NEXT_PUBLIC_FEATURE_PHASE_172", "FEATURE_PHASE_172"],
+  "phase-173": ["NEXT_PUBLIC_FEATURE_PHASE_173", "FEATURE_PHASE_173"],
 };
 
 
@@ -319,6 +331,10 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
     "phase-167",
     "phase-168",
     "phase-169",
+    "phase-170",
+    "phase-171",
+    "phase-172",
+    "phase-173",
   ];
 
   // Filtering is evaluated at call time, allowing runtime test overrides.

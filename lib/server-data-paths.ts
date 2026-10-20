@@ -1,5 +1,6 @@
 import os from "node:os"
 import path from "node:path"
+import { previewDataSubdir } from "@/lib/preview-isolation"
 
 /** Local filenames only — Next file tracing stays predictable. */
 const FILES = {
@@ -56,8 +57,9 @@ export type ServerDataFile = keyof typeof FILES
  * - Local: `<cwd>/.data`
  * - Vercel: `<os.tmpdir()>/phase-server-data` (project dir is read-only)
  * - Override: `PHASE_SERVER_DATA_DIR` (e.g. mounted volume)
+ * - Preview (phase-173): `serverDataRoot()` appends `previews/<id>` to the above
  */
-function serverDataRoot(): string {
+function baseDataRoot(): string {
   const fromEnv = process.env.PHASE_SERVER_DATA_DIR?.trim()
   if (fromEnv) return fromEnv
   if (process.env.VERCEL) {
@@ -66,6 +68,21 @@ function serverDataRoot(): string {
   return path.join(process.cwd(), ".data")
 }
 
+export function serverDataRoot(): string {
+  const base = baseDataRoot()
+  const preview = previewDataSubdir()
+  return preview ? path.join(base, preview) : base
+}
+
 export function serverDataJsonPath(key: ServerDataFile): string {
   return path.join(serverDataRoot(), FILES[key])
+}
+
+/** Every sidecar key, so backup tooling never drifts from the FILES table. */
+export function serverDataFileKeys(): ServerDataFile[] {
+  return Object.keys(FILES) as ServerDataFile[]
+}
+
+export function serverDataFileName(key: ServerDataFile): string {
+  return FILES[key]
 }

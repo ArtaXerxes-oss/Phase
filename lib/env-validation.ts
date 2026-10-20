@@ -5,10 +5,12 @@
 
 import { StrKey } from "@stellar/stellar-sdk"
 import { z } from "zod"
+import { checkPreviewIsolation } from "@/lib/preview-isolation"
+import { incSecurityCounter } from "@/lib/security-counters"
 
 export type EnvValidationError = {
   variable: string
-  issue: "missing" | "invalid_format" | "wrong_key_type"
+  issue: "missing" | "invalid_format" | "wrong_key_type" | "isolation_violation"
   message: string
   hint: string
 }
@@ -16,6 +18,15 @@ export type EnvValidationError = {
 export type EnvValidationResult = {
   valid: boolean
   errors: EnvValidationError[]
+}
+
+/** The log sink must be https; plain http would ship records in the clear. */
+export function isValidLogSinkUrl(value: string): boolean {
+  try {
+    return new URL(value.trim()).protocol === "https:"
+  } catch {
+    return false
+  }
 }
 
 function isValidContractId(value: string): boolean {
@@ -171,6 +182,10 @@ export const serverEnvSchema = z.object({
     { message: "STELLAR_RPC_URL must be a valid HTTP/HTTPS URL" },
   ),
   STELLAR_RPC_FALLBACK_URLS: z.string().optional(),
+  LOG_SINK_URL: z.string().optional().refine(
+    (v) => !v || isValidLogSinkUrl(v),
+    { message: "LOG_SINK_URL must be a valid https:// URL" },
+  ),
   SOROBAN_PROXY_FETCH_TIMEOUT_MS: z.string().optional().refine(
     (v) => {
       if (!v) return true
@@ -263,6 +278,16 @@ export function validatePhaseEnv(): EnvValidationResult {
     "protocolo PHASE (NFT)",
   )
   if (phaseProtocol) errors.push(phaseProtocol)
+
+  for (const violation of checkPreviewIsolation(env)) {
+    errors.push({
+      variable: violation.variable,
+      issue: "isolation_violation",
+      message: violation.message,
+      hint: violation.hint,
+    })
+    incSecurityCounter("preview_isolation_violation")
+  }
 
   // Validar secret keys del faucet si están configuradas
   const adminSecret = validateSecretKey(env.ADMIN_SECRET_KEY, "ADMIN_SECRET_KEY")
