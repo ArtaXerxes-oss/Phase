@@ -4,6 +4,9 @@ import { fetchDistributorBalance, distributorNeedsTopup } from "@/lib/distributo
 import { sendWebhookAlert, WebhookAlertType } from "@/lib/webhook-alerts"
 import { executeDistributorRefill } from "@/lib/distributor-refill"
 import { getDistributorHealthStatus, recordHealthCheck } from "@/lib/distributor-health-store"
+import { evaluateFeatureFlag, refreshFeatureFlagOpsCache } from "@/lib/feature-flags"
+import { readJsonFile } from "@/lib/json-store"
+import { serverDataJsonPath } from "@/lib/server-data-paths"
 
 /**
  * Automated Faucet Distributor Health Monitor
@@ -196,8 +199,22 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // Attempt auto-refill for PHASELQ
-    if (distLowPhaseLiq && distributorNeedsTopup(distBalance, DISTRIBUTOR_PHASELQ_MIN_STROOPS)) {
+    // Attempt auto-refill for PHASELQ (unless halted by phase-174 kill-switch on phase-133)
+    await refreshFeatureFlagOpsCache(() =>
+      readJsonFile(serverDataJsonPath("featureFlagOps"), {}),
+    )
+    const refillFlagEval = evaluateFeatureFlag("phase-133", {
+      wallet: distributorAddress,
+      runtimeOnly: true,
+    })
+    if (refillFlagEval.reason === "kill_switch" || refillFlagEval.reason === "wallet_denied") {
+      results.refillAttempt = {
+        success: false,
+        skippedByKillSwitch: true,
+        reason: refillFlagEval.reason,
+      }
+      results.alerts.push(`🛑 Auto-refill skipped: feature-flag kill-switch active (${refillFlagEval.reason})`)
+    } else if (distLowPhaseLiq && distributorNeedsTopup(distBalance, DISTRIBUTOR_PHASELQ_MIN_STROOPS)) {
       try {
         const refillResult = await executeDistributorRefill(
           issuerKp,

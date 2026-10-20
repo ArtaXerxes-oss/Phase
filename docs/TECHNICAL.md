@@ -695,5 +695,15 @@ Flag: `phase-169` (`NEXT_PUBLIC_FEATURE_PHASE_169` / `FEATURE_PHASE_169`). Defau
 - Audit counters: `ledger_clear_signing_reviewed`, `ledger_clear_signing_approved`, `ledger_clear_signing_rejected`, `ledger_blind_signing_blocked`, `ledger_gate13_preempted` in `lib/security-counters.ts`.
 - Routes: `POST /api/wallet/ledger` for clear-signing lifecycle telemetry.
 
+## 20. Feature-flag ops: staged rollout, per-wallet targeting and kill-switch drills (spike 607)
+
+Flag: `phase-174` (`NEXT_PUBLIC_FEATURE_PHASE_174` / `FEATURE_PHASE_174`). Default off. Rollback: unset var, restart (`feature-flag-ops.json` remains inert on disk).
+
+- `lib/feature-flags.ts`: Deduplicates `PhaseFeatureFlag` (`phase-128`), restores `phase-134` / `phase-135` / `phase-50..53` / `phase-95` / `phase-156` / `phase-170..174` to `ALL_FEATURE_FLAGS`, splits build-time `NEXT_PUBLIC_FEATURE_*` (`clientBundled`) from server runtime `FEATURE_*` (`serverConfigured`), and evaluates runtime rules (`killSwitch`, `denyWallets`, `allowWallets`, `overrideEnabled`, `rolloutBps` 0..10,000 via deterministic 32-bit FNV-1a `flagRolloutBucket`).
+- Stale-on-error rule cache: `refreshFeatureFlagOpsCache()` hydrates the in-memory rule map from `feature-flag-ops.json`; on I/O failure it retains last-known-good rules (`cacheState: "stale"`) and increments `flag_ops_stale_fallback`.
+- Mid-poll idempotency & kill-switch enforcement: `app/api/faucet/route.ts` pins `amountStroops` inside `faucetPending` at payout submission so a mid-poll `phase-131` streak-multiplier ramp or kill-switch never mutates or double-submits an in-flight claim. `lib/distributor-refill.ts` and `app/api/cron/faucet-health/route.ts` check `evaluateFeatureFlag("phase-133", { runtimeOnly: true })` before reserving funds or calling Soroban RPC.
+- Admin route & drill runner: `GET/POST /api/admin/feature-flags` (guarded by `PHASE_ADMIN_KEY` / `ADMIN_API_TOKEN` with `timingSafeEqual`) supports CAS-versioned rule updates (`expectedVersion` / `If-Match` → `409 VERSION_CONFLICT`), emergency kill-switches, and `runKillSwitchDrill()`.
+
+
 
 

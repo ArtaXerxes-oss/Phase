@@ -24,8 +24,8 @@ import { isFeatureEnabled } from "@/lib/feature-flags"
 
 const FLAG: "phase-131" = "phase-131"
 
-export function isStreakMultiplierEnabled(): boolean {
-  return isFeatureEnabled(FLAG)
+export function isStreakMultiplierEnabled(wallet?: string): boolean {
+  return isFeatureEnabled(FLAG, wallet ? { wallet } : undefined)
 }
 
 const DAY_MS = 86_400_000

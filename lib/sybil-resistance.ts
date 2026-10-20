@@ -24,17 +24,11 @@
  */
 
 import { z } from "zod"
+import { isFeatureEnabled } from "@/lib/feature-flags"
 import { HORIZON_URL } from "@/lib/phase-protocol"
 
-export function isSybilResistanceEnabled(): boolean {
-  const v = (
-    process.env.NEXT_PUBLIC_FEATURE_PHASE_145 ??
-    process.env.FEATURE_PHASE_145 ??
-    ""
-  )
-    .trim()
-    .toLowerCase()
-  return v === "1" || v === "true" || v === "yes" || v === "on"
+export function isSybilResistanceEnabled(wallet?: string): boolean {
+  return isFeatureEnabled("phase-145", wallet ? { wallet, runtimeOnly: true } : { runtimeOnly: true })
 }
 
 export function flag145RollbackNote(): string {
@@ -341,7 +335,7 @@ export async function assessWalletSybilRisk(
   address: string,
   opts: { horizonUrl?: string; timeoutMs?: number; suspectThreshold?: number } = {},
 ): Promise<SybilScore | null> {
-  if (!isSybilResistanceEnabled()) return null
+  if (!isSybilResistanceEnabled(address)) return null
   const features = await fetchAccountHistoryFeatures(address, opts)
   if (!features) return null
   try {

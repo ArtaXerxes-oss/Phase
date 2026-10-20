@@ -85,7 +85,7 @@ type WalletClaims = {
   dailyAt?: number
   quests?: Record<string, number>
   /** Mint ya enviado; reutilizamos el hash para seguir el poll sin reenviar (serverless timeout). */
-  faucetPending?: { hash: string; reward: RewardType; at: number }
+  faucetPending?: { hash: string; reward: RewardType; at: number; amountStroops?: string }
 }
 
 type FaucetClaims = Record<string, WalletClaims>
@@ -157,7 +157,12 @@ async function readClaims(): Promise<FaucetClaims> {
       let faucetPending: WalletClaims["faucetPending"]
       if (fp && typeof fp === "object" && typeof fp.hash === "string" && typeof fp.at === "number") {
         const r = await parseRewardType(fp.reward)
-        faucetPending = { hash: fp.hash, reward: r, at: fp.at }
+        faucetPending = {
+          hash: fp.hash,
+          reward: r,
+          at: fp.at,
+          ...(typeof fp.amountStroops === "string" ? { amountStroops: fp.amountStroops } : {}),
+        }
       }
       normalized[wallet] = {
         genesisAt: typeof value.genesisAt === "number" ? value.genesisAt : undefined,
@@ -593,7 +598,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Triple check #3: Sybil resistance score (on-chain wallet history)
-  if (isSybilResistanceEnabled()) {
+  if (isSybilResistanceEnabled(userAddress)) {
     const sybilScore = await assessWalletSybilRisk(userAddress)
     if (sybilScore && sybilScore.suspect) {
       return NextResponse.json(
@@ -651,7 +656,7 @@ export async function POST(req: NextRequest) {
   }
 
   // phase-132: validate referral code early (before mint) to fail fast
-  if (reward === "genesis" && body.referralCode && isReferralQuestEnabled()) {
+  if (reward === "genesis" && body.referralCode && isReferralQuestEnabled(userAddress)) {
     const refValidation = await validateReferralCode(body.referralCode, userAddress)
     if (!refValidation.valid) {
       return NextResponse.json(
@@ -801,7 +806,7 @@ export async function POST(req: NextRequest) {
   let payoutSubmitted = false
   try {
     // phase-133: auto-top-up distributor if balance is low (fire-and-forget, non-blocking)
-    if (isDistributorTopupEnabled() && useTransfer) {
+    if (isDistributorTopupEnabled(source) && useTransfer) {
       void prepareTopup(source).then((topup) => {
         if (topup.shouldTopup) {
           console.log(`[faucet] phase-133 distributor auto-top-up: ${topup.reason}`)
@@ -821,6 +826,8 @@ export async function POST(req: NextRequest) {
 
     if (row.faucetPending?.reward === reward) {
       const pendingHash = row.faucetPending.hash
+      const pinnedAmountStroops =
+        row.faucetPending.amountStroops ?? (await rewardAmountStroops(reward))
       const out = await pollSubmittedMint(server, pendingHash)
       if (out.outcome === "SUCCESS") {
         await markClaim(userAddress, reward, pendingHash)
@@ -831,7 +838,7 @@ export async function POST(req: NextRequest) {
         }
         // phase-132: record referral bonus on genesis claim
         let referralBonus: string | null = null
-        if (reward === "genesis" && body.referralCode && isReferralQuestEnabled()) {
+        if (reward === "genesis" && body.referralCode && isReferralQuestEnabled(userAddress)) {
           const refResult = await recordReferral(body.referralCode, userAddress)
           referralBonus = refResult.bonus
         }
@@ -839,7 +846,7 @@ export async function POST(req: NextRequest) {
           ok: true,
           hash: pendingHash,
           reward,
-          amountStroops: await rewardAmountStroops(reward),
+          amountStroops: pinnedAmountStroops,
           ...(streakInfo ? { streak: streakInfo } : {}),
           ...(referralBonus ? { referralBonus } : {}),
         })
@@ -855,7 +862,7 @@ export async function POST(req: NextRequest) {
           hash: pendingHash,
           pending: true,
           reward,
-          amountStroops: await rewardAmountStroops(reward),
+          amountStroops: pinnedAmountStroops,
           note: "Transaction still pending on ledger. Retry the same reward in a few seconds.",
         },
         { status: 202 },
@@ -927,7 +934,7 @@ export async function POST(req: NextRequest) {
     const c = new Contract(tokenId)
     // phase-131: apply streak multiplier to daily reward amount
     let effectiveAmountStroops = await rewardAmountStroops(reward)
-    if (reward === "daily" && isStreakMultiplierEnabled()) {
+    if (reward === "daily" && isStreakMultiplierEnabled(userAddress)) {
       const streak = await getStreakInfo(userAddress)
       if (streak.multiplier > 1) {
         effectiveAmountStroops = applyStreakMultiplier(effectiveAmountStroops, streak.multiplier)
@@ -968,7 +975,7 @@ export async function POST(req: NextRequest) {
     liveClaims = await readClaims()
     liveClaims[userAddress] = {
       ...(liveClaims[userAddress] ?? {}),
-      faucetPending: { hash, reward, at: Date.now() },
+      faucetPending: { hash, reward, at: Date.now(), amountStroops: effectiveAmountStroops },
     }
     await writeClaims(liveClaims)
 
@@ -982,7 +989,7 @@ export async function POST(req: NextRequest) {
       }
       // phase-132: record referral bonus on genesis claim
       let referralBonus: string | null = null
-      if (reward === "genesis" && body.referralCode && isReferralQuestEnabled()) {
+      if (reward === "genesis" && body.referralCode && isReferralQuestEnabled(userAddress)) {
         const refResult = await recordReferral(body.referralCode, userAddress)
         referralBonus = refResult.bonus
       }
@@ -1006,7 +1013,7 @@ export async function POST(req: NextRequest) {
         hash,
         pending: true,
         reward,
-        amountStroops: await rewardAmountStroops(reward),
+        amountStroops: effectiveAmountStroops,
         note: "Transaction still pending on ledger. Retry the same reward in a few seconds.",
       },
       { status: 202 },

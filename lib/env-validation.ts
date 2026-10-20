@@ -5,6 +5,7 @@
 
 import { StrKey } from "@stellar/stellar-sdk"
 import { z } from "zod"
+import { auditFeatureFlagOpsWiring, isFeatureEnabled } from "@/lib/feature-flags"
 
 export type EnvValidationError = {
   variable: string
@@ -320,9 +321,8 @@ export function validateFaucetIssuerConfig(
 //           follow-store data is untouched (read/write path in follow-store.ts
 //           is not modified by this module).
 
-export function isPhase95Enabled(): boolean {
-  const v = (process.env.NEXT_PUBLIC_FEATURE_PHASE_95 ?? process.env.FEATURE_PHASE_95 ?? "").trim().toLowerCase()
-  return v === "1" || v === "true" || v === "yes" || v === "on"
+export function isPhase95Enabled(wallet?: string): boolean {
+  return isFeatureEnabled("phase-95", wallet ? { wallet } : undefined)
 }
 
 export function flag95RollbackNote(): string {
@@ -374,7 +374,7 @@ export function buildFollowGraphExport(
   following: string[],
   followers: string[],
 ): FollowGraphExport {
-  if (!isPhase95Enabled()) {
+  if (!isPhase95Enabled(wallet)) {
     throw new FollowGraphPortabilityError("FLAG_DISABLED", "Follow-graph export disabled (phase-95 flag off)")
   }
   const cleanWallet = wallet.trim()
@@ -475,9 +475,8 @@ export function formatEnvValidationErrors(result: EnvValidationResult): string {
 // Rollback: unset the flag → assignQuestVariant throws FLAG_DISABLED and callers
 //           fall back to their static reward. No data migration to undo.
 
-export function isQuestExperimentEnabled(): boolean {
-  const v = (process.env.NEXT_PUBLIC_FEATURE_PHASE_50 ?? process.env.FEATURE_PHASE_50 ?? "").trim().toLowerCase()
-  return v === "1" || v === "true" || v === "yes" || v === "on"
+export function isQuestExperimentEnabled(wallet?: string): boolean {
+  return isFeatureEnabled("phase-50", wallet ? { wallet } : undefined)
 }
 
 export function flag50RollbackNote(): string {
@@ -555,7 +554,7 @@ export type QuestVariantAssignment = {
  * variant while the config's variant set and weights are unchanged.
  */
 export function assignQuestVariant(rawConfig: unknown, wallet: string, opts: { force?: boolean } = {}): QuestVariantAssignment {
-  if (!opts.force && !isQuestExperimentEnabled()) {
+  if (!opts.force && !isQuestExperimentEnabled(wallet)) {
     throw new QuestExperimentError("FLAG_DISABLED", "Quest A/B experimentation disabled (phase-50 flag off)", {
       rollback: flag50RollbackNote(),
     })
@@ -654,6 +653,11 @@ export async function auditPhaseFeatureWiring(): Promise<{ ok: boolean; notes: s
   const phase95 = auditFollowGraphPortabilityWiring()
   notes.push(phase95.note)
   if (!phase95.ok) allOk = false
+
+  // Audit phase-174 (feature-flag ops: staged rollout, wallet targeting & kill-switch)
+  const phase174 = auditFeatureFlagOpsWiring()
+  notes.push(phase174.note)
+  if (!phase174.ok) allOk = false
 
   // Audit phase-80 (fractional ownership)
   try {

@@ -23,8 +23,8 @@ import { assessWalletSybilRisk, isSybilResistanceEnabled } from "@/lib/sybil-res
 
 const FLAG: "phase-132" = "phase-132"
 
-export function isReferralQuestEnabled(): boolean {
-  return isFeatureEnabled(FLAG)
+export function isReferralQuestEnabled(wallet?: string): boolean {
+  return isFeatureEnabled(FLAG, wallet ? { wallet } : undefined)
 }
 
 const REFERRAL_BONUS_STROOPS = "15000000" // 15 PHASELQ bonus
@@ -98,7 +98,7 @@ function generateCode(): ReferralCode {
  * returns the existing code if one was already generated.
  */
 export async function getOrCreateReferralCode(wallet: string): Promise<ReferralCode> {
-  if (!isReferralQuestEnabled()) return ""
+  if (!isReferralQuestEnabled(wallet)) return ""
   const store = await readStore()
   if (hasOwn(store.codesByWallet, wallet) && store.codesByWallet[wallet]) return store.codesByWallet[wallet]
 
@@ -140,7 +140,7 @@ export async function recordReferral(
   referredWallet: string,
   originFingerprint?: string,
 ): Promise<{ bonus: string | null; error?: string }> {
-  if (!isReferralQuestEnabled()) return { bonus: null }
+  if (!isReferralQuestEnabled(referredWallet)) return { bonus: null }
   if (!referralCode || !referredWallet) return { bonus: null }
 
   const store = await readStore()
