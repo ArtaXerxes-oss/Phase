@@ -230,6 +230,38 @@ CREATE TABLE IF NOT EXISTS gauge_epoch_aggregates (
   allocated_budget_stroops TEXT NOT NULL,
   PRIMARY KEY (epoch, collection_id)
 );
+
+-- Spike 610 (phase-176): Unified analytics event warehouse across faucet, claim,
+-- notifications, forge, and push delivery.
+CREATE TABLE IF NOT EXISTS analytics_events (
+  id              TEXT PRIMARY KEY,
+  surface         TEXT NOT NULL,
+  stage           TEXT NOT NULL,
+  wallet          TEXT,
+  session_id      TEXT,
+  correlation_id  TEXT,
+  ts              INTEGER NOT NULL,
+  metadata_json   TEXT NOT NULL DEFAULT '{}',
+  reason          TEXT,
+  dedupe_key      TEXT NOT NULL UNIQUE
+);
+CREATE INDEX IF NOT EXISTS idx_analytics_surface_stage_ts
+  ON analytics_events (surface, stage, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_analytics_wallet_ts
+  ON analytics_events (wallet, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_analytics_session_ts
+  ON analytics_events (session_id, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_analytics_correlation_ts
+  ON analytics_events (correlation_id, ts DESC);
+
+CREATE TABLE IF NOT EXISTS analytics_session_stitching (
+  session_id      TEXT PRIMARY KEY,
+  wallet          TEXT NOT NULL,
+  first_seen_at   INTEGER NOT NULL,
+  stitched_at     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_analytics_stitching_wallet
+  ON analytics_session_stitching (wallet);
 `;
 
 // Issue #89 (phase-140): `listings` predates the creator/royalty concept, so

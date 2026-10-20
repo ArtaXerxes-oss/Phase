@@ -50,6 +50,7 @@ const FILES = {
   walletSessions: "wallet-sessions.json",
   ledgerAudit: "ledger-audit.json",
   featureFlagOps: "feature-flag-ops.json",
+  analyticsWarehouse: "analytics-warehouse.json",
 } as const
 
 

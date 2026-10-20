@@ -1,6 +1,7 @@
 import { readJsonFile, updateStore, updateStoreWithReader } from "@/lib/json-store";
 import { serverDataJsonPath } from "@/lib/server-data-paths";
 import { createNotification } from "@/lib/notification-store";
+import { isAnalyticsWarehouseEnabled, recordWarehouseEvent } from "@/lib/analytics-warehouse";
 
 export type AchievementId =
   | "first_mint"
@@ -148,6 +149,19 @@ export async function unlockAchievement(
     }).catch(() => {
       /* silent */
     });
+
+    if (isAnalyticsWarehouseEnabled(wallet)) {
+      void recordWarehouseEvent({
+        surface: "achievements",
+        stage: "achievement_unlocked",
+        wallet,
+        metadata: {
+          achievement_id: id,
+          achievement_name: ACHIEVEMENT_NAMES[id] ?? id,
+          tx_evidence: evidence,
+        },
+      }).catch(() => {});
+    }
   }
   return didUnlock;
 }

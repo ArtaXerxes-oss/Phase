@@ -160,7 +160,8 @@ export type PhaseFeatureFlag =
   | "phase-172"
   | "phase-173"
   | "phase-174"
-  | "phase-175";
+  | "phase-175"
+  | "phase-176";
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-50": ["NEXT_PUBLIC_FEATURE_PHASE_50", "FEATURE_PHASE_50"],
@@ -246,6 +247,7 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-173": ["NEXT_PUBLIC_FEATURE_PHASE_173", "FEATURE_PHASE_173"],
   "phase-174": ["NEXT_PUBLIC_FEATURE_PHASE_174", "FEATURE_PHASE_174"],
   "phase-175": ["NEXT_PUBLIC_FEATURE_PHASE_175", "FEATURE_PHASE_175"],
+  "phase-176": ["NEXT_PUBLIC_FEATURE_PHASE_176", "FEATURE_PHASE_176"],
 };
 
 /** Canonical ordered list of all feature flags (fixes prior missing phase-134/135 & duplicate phase-128). */
@@ -333,6 +335,7 @@ export const ALL_FEATURE_FLAGS: readonly PhaseFeatureFlag[] = [
   "phase-173",
   "phase-174",
   "phase-175",
+  "phase-176",
 ] as const;
 
 function isTruthy(v: string | undefined): boolean {
@@ -1114,3 +1117,15 @@ export function auditFeatureFlagOpsWiring(): { ok: boolean; note: string } {
     note: `[phase-174] feature-flag ops wiring OK (${ALL_FEATURE_FLAGS.length} registered flags, ${enabledCount} enabled, ${activeRules} runtime rules). ${flagRollbackNote("phase-174")}`,
   };
 }
+
+/**
+ * Spike 610 / phase-176: Unified analytics event warehouse across faucet, claim and notification funnels.
+ */
+export function isAnalyticsWarehouseEnabled(wallet?: string): boolean {
+  return isFeatureEnabled("phase-176", { wallet });
+}
+
+export function phase176RollbackNote(): string {
+  return flagRollbackNote("phase-176");
+}
+

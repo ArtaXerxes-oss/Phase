@@ -712,6 +712,17 @@ Flag: `phase-175` (`NEXT_PUBLIC_FEATURE_PHASE_175` / `FEATURE_PHASE_175`). Defau
 - Canonical WASM target & Soroban ABI pin: `scripts/package.json` `build:phase` and `optimize:phase` now target `wasm32-unknown-unknown` (matching `.github/workflows/ci.yml` and `scripts/deploy-phase-sep50.ts`, removing `wasm32v1-none` skew). Both `contracts/phase-protocol` and `contracts/mock-token` declare `[package.metadata.phase_cadence]` (`soroban_sdk_major = 22`, `soroban_abi_version = 22000`, `stellar_cli_version = "23.0.0"`) and expose `pub fn soroban_abi_version(_env: Env) -> u32 { 22_000 }`.
 - Grouped cadence & CI gate: `.github/dependabot.yml` groups `@stellar/*` + `@creit.tech/stellar-wallets-kit` + `x402-stellar`, `next` + `react` + `react-dom`, `vitest` + `@vitest/coverage-v8`, and `soroban-*` Cargo updates on a weekly schedule. `npm run deps:cadence` (`scripts/check-dependency-cadence.ts` / `lib/dependency-cadence.ts`) runs in `.github/workflows/ci.yml`, `dependency-audit.yml`, and `secret-rotation.yml`.
 
+## 22. Unified analytics event warehouse across faucet, claim, notifications, forge, and push funnels (spike 610)
+
+Flag: `phase-176` (`NEXT_PUBLIC_FEATURE_PHASE_176` / `FEATURE_PHASE_176`). Default off. Rollback: unset var, restart (`analytics_events` rows remain inert on disk).
+
+- SQLite WAL persistence: `analytics_events` table in `lib/sqlite-db.ts` with indexed `surface`, `stage`, `wallet`, `session_id`, `correlation_id`, `ts`, and `dedupe_key` (SHA256 of surface, stage, subject, minute bucket) ensuring strict write idempotency across serverless invocations.
+- Session stitching: `analytics_session_stitching` table automatically joins anonymous pre-connect visitor events (`session_id`) with authenticated wallet addresses upon wallet connection (`session_id -> wallet`), retroactively updating past session events so funnels reflect true conversion.
+- Cross-surface lifecycle event sourcing: emits structured, bounded events from faucet claim cycles (`pending`, `polling`, `202`, `409`, `502`, `confirmed`, `failed`), in-app notifications (`created`, `read`, `all_read`), push dispatches (`dispatched`, `failed`), observability HTTP routes, forge jobs, and quest/achievement milestones.
+- Bounded closed-label metadata: `sanitizeAnalyticsMetadata` caps keys at 25, truncates string lengths to 256, and strips authentication tokens, cookies, secrets, and private keys.
+- Unified funnel queries & Article 20 portability: `getUnifiedFunnelAnalytics` computes stage-by-stage counts, drop-offs, conversion rates, and average time-to-convert (ms); `exportAnalyticsForWallet` produces GDPR Article 20 data portability exports; backward-compatible migration automatically drains legacy `faucet-funnel-events.json` 5k-ring into SQLite on first initialization.
+
+
 
 
 

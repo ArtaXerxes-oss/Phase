@@ -4,6 +4,7 @@ import { z } from "zod"
 import { isFeatureEnabled, flagRollbackNote } from "@/lib/feature-flags"
 import { readJsonFile, updateStore, updateStoreWithReader } from "@/lib/json-store"
 import { serverDataJsonPath } from "@/lib/server-data-paths"
+import { isAnalyticsWarehouseEnabled, recordWarehouseEvent } from "@/lib/analytics-warehouse"
 
 export type NotificationType =
   | "mint_in_collection"
@@ -227,6 +228,15 @@ export async function createNotification(
     // Prepend newest first; cap at MAX_PER_WALLET
     store[wallet] = [notif, ...list].slice(0, MAX_PER_WALLET)
   })
+
+  if (isAnalyticsWarehouseEnabled(wallet)) {
+    void recordWarehouseEvent({
+      surface: "notifications",
+      stage: "notification_created",
+      wallet,
+      metadata: { notificationId: notif.id, type },
+    }).catch(() => {})
+  }
 }
 
 export async function createNotificationBatch(
@@ -287,6 +297,14 @@ export async function markRead(wallet: string, notificationId: string): Promise<
     if (!list) return
     store[wallet] = list.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
   })
+  if (isAnalyticsWarehouseEnabled(wallet)) {
+    void recordWarehouseEvent({
+      surface: "notifications",
+      stage: "notification_read",
+      wallet,
+      metadata: { notificationId },
+    }).catch(() => {})
+  }
 }
 
 export async function markAllRead(wallet: string): Promise<void> {
@@ -297,6 +315,13 @@ export async function markAllRead(wallet: string): Promise<void> {
     if (!list) return
     store[wallet] = list.map((n) => ({ ...n, read: true }))
   })
+  if (isAnalyticsWarehouseEnabled(wallet)) {
+    void recordWarehouseEvent({
+      surface: "notifications",
+      stage: "all_read",
+      wallet,
+    }).catch(() => {})
+  }
 }
 
 export async function getUnreadCount(wallet: string): Promise<number> {
@@ -406,6 +431,16 @@ export async function recordFaucetFunnelEvent(
     session_id: parsed.data.session_id ?? null,
     ts: parsed.data.ts ?? opts.now ?? Date.now(),
     reason: parsed.data.reason ?? null,
+  }
+  if (isAnalyticsWarehouseEnabled(event.wallet ?? undefined)) {
+    void recordWarehouseEvent({
+      surface: "faucet",
+      stage: event.stage,
+      wallet: event.wallet,
+      session_id: event.session_id,
+      ts: event.ts,
+      reason: event.reason,
+    }).catch(() => {})
   }
   return updateStoreWithReader<FaucetFunnelStore, FaucetFunnelEvent>(
     "faucetFunnelEvents",

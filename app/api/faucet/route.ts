@@ -62,6 +62,7 @@ import { commitRefill, readLedger, releaseRefill, reserveFunds } from "@/lib/dis
 import { CANONICAL_SOROBAN_ABI_VERSION, isDependencyCadenceEnabled } from "@/lib/dependency-cadence"
 import { incSecurityCounter } from "@/lib/security-counters"
 import { createNotification } from "@/lib/notification-store"
+import { isAnalyticsWarehouseEnabled, recordWarehouseEvent } from "@/lib/analytics-warehouse"
 
 /** Vercel: Hobby ~10s; Pro/Enterprise permite más — subir si el faucet sigue en 504. */
 export const maxDuration = 60
@@ -832,6 +833,16 @@ export async function POST(req: NextRequest) {
       const pendingHash = row.faucetPending.hash
       const pinnedAmountStroops =
         row.faucetPending.amountStroops ?? (await rewardAmountStroops(reward))
+
+      if (isAnalyticsWarehouseEnabled(userAddress)) {
+        void recordWarehouseEvent({
+          surface: "claim",
+          stage: "claim_polling",
+          wallet: userAddress,
+          metadata: { hash: pendingHash, reward, source: "pending_poll" },
+        }).catch(() => {})
+      }
+
       const out = await pollSubmittedMint(server, pendingHash)
       if (out.outcome === "SUCCESS") {
         await markClaim(userAddress, reward, pendingHash)
@@ -846,6 +857,16 @@ export async function POST(req: NextRequest) {
           const refResult = await recordReferral(body.referralCode, userAddress)
           referralBonus = refResult.bonus
         }
+
+        if (isAnalyticsWarehouseEnabled(userAddress)) {
+          void recordWarehouseEvent({
+            surface: "claim",
+            stage: "claim_confirmed",
+            wallet: userAddress,
+            metadata: { hash: pendingHash, reward, amountStroops: pinnedAmountStroops },
+          }).catch(() => {})
+        }
+
         return NextResponse.json({
           ok: true,
           hash: pendingHash,
@@ -858,8 +879,29 @@ export async function POST(req: NextRequest) {
       if (out.outcome === "FAILED") {
         await clearFaucetPendingOnly(userAddress)
         abortArcClaim(reward)
+
+        if (isAnalyticsWarehouseEnabled(userAddress)) {
+          void recordWarehouseEvent({
+            surface: "claim",
+            stage: "claim_failed",
+            wallet: userAddress,
+            reason: String(out.failed),
+            metadata: { hash: pendingHash, reward },
+          }).catch(() => {})
+        }
+
         return faucetMintLedgerFailedResponse(pendingHash, out.failed)
       }
+
+      if (isAnalyticsWarehouseEnabled(userAddress)) {
+        void recordWarehouseEvent({
+          surface: "claim",
+          stage: "claim_status_202",
+          wallet: userAddress,
+          metadata: { hash: pendingHash, reward },
+        }).catch(() => {})
+      }
+
       return NextResponse.json(
         {
           ok: false,
@@ -874,6 +916,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (row.faucetPending && row.faucetPending.reward !== reward) {
+      if (isAnalyticsWarehouseEnabled(userAddress)) {
+        void recordWarehouseEvent({
+          surface: "claim",
+          stage: "claim_status_409",
+          wallet: userAddress,
+          reason: "FAUCET_MINT_IN_PROGRESS",
+          metadata: { reward, blockingReward: row.faucetPending.reward },
+        }).catch(() => {})
+      }
+
       return NextResponse.json(
         {
           error:
@@ -968,6 +1020,15 @@ export async function POST(req: NextRequest) {
     if (send.status === "ERROR") {
       abortArcClaim(reward)
       const err = (send as { errorResult?: unknown }).errorResult
+      if (isAnalyticsWarehouseEnabled(userAddress)) {
+        void recordWarehouseEvent({
+          surface: "claim",
+          stage: "claim_status_502",
+          wallet: userAddress,
+          reason: "RPC_SEND_ERROR",
+          metadata: { detail: String(err ?? send) },
+        }).catch(() => {})
+      }
       return NextResponse.json(
         { error: "RPC rechazó la transacción.", detail: String(err ?? send) },
         { status: 502 },
@@ -975,6 +1036,15 @@ export async function POST(req: NextRequest) {
     }
     const hash = send.hash as string
     payoutSubmitted = true
+
+    if (isAnalyticsWarehouseEnabled(userAddress)) {
+      void recordWarehouseEvent({
+        surface: "claim",
+        stage: "claim_pending",
+        wallet: userAddress,
+        metadata: { hash, reward, amountStroops: effectiveAmountStroops },
+      }).catch(() => {})
+    }
 
     liveClaims = await readClaims()
     liveClaims[userAddress] = {
@@ -997,6 +1067,16 @@ export async function POST(req: NextRequest) {
         const refResult = await recordReferral(body.referralCode, userAddress)
         referralBonus = refResult.bonus
       }
+
+      if (isAnalyticsWarehouseEnabled(userAddress)) {
+        void recordWarehouseEvent({
+          surface: "claim",
+          stage: "claim_confirmed",
+          wallet: userAddress,
+          metadata: { hash, reward, amountStroops: effectiveAmountStroops },
+        }).catch(() => {})
+      }
+
       return NextResponse.json({
         ok: true,
         hash,
@@ -1009,8 +1089,29 @@ export async function POST(req: NextRequest) {
     if (out.outcome === "FAILED") {
       await clearFaucetPendingOnly(userAddress)
       abortArcClaim(reward)
+
+      if (isAnalyticsWarehouseEnabled(userAddress)) {
+        void recordWarehouseEvent({
+          surface: "claim",
+          stage: "claim_failed",
+          wallet: userAddress,
+          reason: String(out.failed),
+          metadata: { hash, reward },
+        }).catch(() => {})
+      }
+
       return faucetMintLedgerFailedResponse(hash, out.failed)
     }
+
+    if (isAnalyticsWarehouseEnabled(userAddress)) {
+      void recordWarehouseEvent({
+        surface: "claim",
+        stage: "claim_status_202",
+        wallet: userAddress,
+        metadata: { hash, reward },
+      }).catch(() => {})
+    }
+
     return NextResponse.json(
       {
         ok: false,
@@ -1025,6 +1126,17 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     if (!payoutSubmitted) abortArcClaim(reward)
     const msg = e instanceof Error ? e.message : String(e)
+
+    if (isAnalyticsWarehouseEnabled(userAddress)) {
+      void recordWarehouseEvent({
+        surface: "claim",
+        stage: "claim_status_502",
+        wallet: userAddress,
+        reason: msg,
+        metadata: { reward },
+      }).catch(() => {})
+    }
+
     return NextResponse.json({ error: msg }, { status: 502 })
   }
 }

@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
+import {
+  isAnalyticsWarehouseEnabled,
+  recordWarehouseEvent,
+  sanitizeAnalyticsMetadata,
+} from "@/lib/analytics-warehouse"
 
 type ApiLogLevel = "info" | "warn" | "error"
 type ApiMetadata = Record<string, unknown>
@@ -29,6 +34,7 @@ export function createApiRequestContext(request: NextRequest, route: string) {
   const correlationId = getIncomingCorrelationId(request)
 
   function log(level: ApiLogLevel, event: string, metadata: ApiMetadata = {}) {
+    const boundedMetadata = sanitizeAnalyticsMetadata(metadata)
     const payload = {
       timestamp: new Date().toISOString(),
       level,
@@ -36,7 +42,7 @@ export function createApiRequestContext(request: NextRequest, route: string) {
       route,
       method: request.method,
       correlationId,
-      ...metadata,
+      ...boundedMetadata,
     }
     const line = JSON.stringify(payload)
 
@@ -51,11 +57,29 @@ export function createApiRequestContext(request: NextRequest, route: string) {
     const response = NextResponse.json(body, { ...responseInit, status, headers })
     response.headers.set(CORRELATION_HEADER, correlationId)
     response.headers.set(REQUEST_ID_HEADER, correlationId)
+    const durationMs = Date.now() - startedAt
+    const boundedMetadata = sanitizeAnalyticsMetadata(metadata)
     log(status >= 500 ? "error" : status >= 400 ? "warn" : "info", event, {
       status,
-      durationMs: Date.now() - startedAt,
-      ...metadata,
+      durationMs,
+      ...boundedMetadata,
     })
+
+    if (isAnalyticsWarehouseEnabled()) {
+      void recordWarehouseEvent({
+        surface: "observability",
+        stage: event,
+        correlation_id: correlationId,
+        metadata: {
+          route,
+          method: request.method,
+          status,
+          durationMs,
+          ...boundedMetadata,
+        },
+      }).catch(() => {})
+    }
+
     return response
   }
 

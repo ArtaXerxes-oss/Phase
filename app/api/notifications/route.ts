@@ -16,11 +16,31 @@ import {
   type GatewayAuthRotation,
   type NotificationPreferences,
 } from "@/lib/notification-store"
+import {
+  isAnalyticsWarehouseEnabled,
+  getUnifiedFunnelAnalytics,
+  recordWarehouseEvent,
+} from "@/lib/analytics-warehouse"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
+  // Spike 610 (phase-176): unified analytics warehouse query
+  if (request.nextUrl.searchParams.get("warehouse") === "1") {
+    if (!isAnalyticsWarehouseEnabled()) {
+      return NextResponse.json(
+        { error: "analytics warehouse disabled", code: "FLAG_DISABLED", feature_enabled: false },
+        { status: 404 },
+      )
+    }
+    const surface = request.nextUrl.searchParams.get("surface") ?? "faucet"
+    const windowParam = Number(request.nextUrl.searchParams.get("windowMs"))
+    const windowMs = Number.isFinite(windowParam) && windowParam > 0 ? windowParam : undefined
+    const funnel = await getUnifiedFunnelAnalytics({ surface, windowMs })
+    return NextResponse.json({ funnel, feature_enabled: true })
+  }
+
   // module #53 (phase-53): faucet claim-funnel analytics — operator view, not wallet-scoped.
   if (request.nextUrl.searchParams.get("funnel") === "1") {
     if (!isFaucetAnalyticsEnabled()) {
@@ -51,6 +71,7 @@ export async function GET(request: NextRequest) {
     preferences_feature_enabled: isNotificationPreferencesEnabled(),
     gateway_auth_rotation_feature_enabled: isPhase128Enabled(),
     faucet_analytics_feature_enabled: isFaucetAnalyticsEnabled(),
+    warehouse_feature_enabled: isAnalyticsWarehouseEnabled(),
   })
 }
 
@@ -112,6 +133,26 @@ export async function POST(request: NextRequest) {
       const details = error instanceof Error && "details" in error ? (error as { details?: unknown }).details : undefined
       return NextResponse.json(
         { error: error instanceof Error ? error.message : "funnel event rejected", code, details },
+        { status: code === "FLAG_DISABLED" ? 404 : 400 },
+      )
+    }
+  }
+
+  // Spike 610 (phase-176): unified cross-surface event recording
+  if (body.action === "record_warehouse_event") {
+    try {
+      const correlationId = request.headers.get("x-correlation-id") || request.headers.get("x-request-id") || undefined
+      const eventPayload = typeof body.funnel_event === "object" && body.funnel_event !== null ? (body.funnel_event as Record<string, unknown>) : {}
+      const event = await recordWarehouseEvent({
+        correlation_id: correlationId,
+        ...eventPayload,
+      })
+      return NextResponse.json({ ok: true, event, feature_enabled: isAnalyticsWarehouseEnabled() })
+    } catch (error) {
+      const code = error instanceof Error && "code" in error ? String((error as { code: unknown }).code) : "UNKNOWN"
+      const details = error instanceof Error && "details" in error ? (error as { details?: unknown }).details : undefined
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "warehouse event rejected", code, details },
         { status: code === "FLAG_DISABLED" ? 404 : 400 },
       )
     }
