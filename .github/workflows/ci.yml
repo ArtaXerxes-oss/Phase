@@ -52,10 +52,9 @@ jobs:
         continue-on-error: true
         run: npm run lint
       - name: Type check
-        # Pre-existing type errors exist outside this change's scope; surfaced but
-        # non-blocking until tracked and fixed separately.
-        continue-on-error: true
         run: npm run typecheck
+      - name: Unit tests
+        run: npm test
       - name: Build
         run: npm run build
         env:

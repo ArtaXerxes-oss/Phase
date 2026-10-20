@@ -479,7 +479,7 @@ Contract commands are documented in [`contracts/README.md`](../contracts/README.
 `.github/workflows/ci.yml` runs on every PR and push to `main`:
 
 - `contracts` — compiles and tests both Soroban crates (`mock-token`, `phase-protocol`) against `wasm32-unknown-unknown`.
-- `web` — `npm run lint`, `npm run typecheck` (both currently non-blocking pending a cleanup of pre-existing errors — see the job for the tracked count), and `npm run build`.
+- `web` — `npm run lint` (non-blocking: 286 pre-existing errors), `npm run typecheck` and `npm test` (both blocking), and `npm run build`.
 - `deploy-staging` — on push to `main` only, behind a `staging` GitHub environment: builds + optimizes `phase-protocol` and runs `scripts/deploy-phase-sep50.ts` against testnet using repo secrets/vars.
 
 ---

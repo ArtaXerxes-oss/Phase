@@ -734,6 +734,47 @@ export const phaseCopy: Record<
     pricing: PricingCopy
     moderationQueue: ModerationQueueCopy
     questArcs: QuestArcCopy
+    qrFlows: {
+      receiveTitle: string
+      scanTitle: string
+      shareReferral: string
+      scanPrompt: string
+      copyUri: string
+      copied: string
+      requestAmount: string
+      scanQr: string
+      viewQr: string
+      manualEntry: string
+      cameraError: string
+    }
+    walletConnectResilience: {
+      title: string
+      reconnectPrompt: string
+      chainMismatch: string
+      openMobileWallet: string
+      relayDisconnected: string
+      reconnectedToast: string
+    }
+    xbullParity: {
+      badge: string
+      signPrompt: string
+      trustlinePrompt: string
+      rejected: string
+      networkMismatch: string
+    }
+    ledgerClearSigning: {
+      title: string
+      description: string
+      targetContract: string
+      hostFunction: string
+      verificationCode: string
+      matchCodePrompt: string
+      acknowledgePrompt: string
+      approveButton: string
+      cancelButton: string
+      blindSigningDisabled: string
+      gate13RiskAlert: string
+    }
   }
 > = {
   en: {

@@ -20,7 +20,7 @@ type Props = {
   fallback?: ReactNode
 }
 
-export function IpfsDisplayImg({ uri, alt = "", className, loading = "lazy", variant, focalPoint, onExhausted }: Props) {
+export function IpfsDisplayImg({ uri, alt = "", className, loading = "lazy", variant, focalPoint, onExhausted, fallback }: Props) {
   const candidates = useMemo(() => {
     const urls = ipfsHttpsGatewayUrls(uri)
     if (!variant) return urls
