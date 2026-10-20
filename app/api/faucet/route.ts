@@ -59,6 +59,7 @@ import {
   stepClaimable,
 } from "@/lib/quest-arcs"
 import { commitRefill, readLedger, releaseRefill, reserveFunds } from "@/lib/distributor-ledger"
+import { CANONICAL_SOROBAN_ABI_VERSION, isDependencyCadenceEnabled } from "@/lib/dependency-cadence"
 import { incSecurityCounter } from "@/lib/security-counters"
 import { createNotification } from "@/lib/notification-store"
 
@@ -346,6 +347,9 @@ async function buildWalletStatus(wallet: string | null, claims: FaucetClaims) {
     rewards,
     ...(streakInfo ? { streak: streakInfo } : {}),
     ...(referralStats ? { referral: referralStats } : {}),
+    ...(isDependencyCadenceEnabled(wallet ?? undefined)
+      ? { sorobanAbiVersion: CANONICAL_SOROBAN_ABI_VERSION }
+      : {}),
   }
 }
 

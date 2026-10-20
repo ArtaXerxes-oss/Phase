@@ -704,6 +704,15 @@ Flag: `phase-174` (`NEXT_PUBLIC_FEATURE_PHASE_174` / `FEATURE_PHASE_174`). Defau
 - Mid-poll idempotency & kill-switch enforcement: `app/api/faucet/route.ts` pins `amountStroops` inside `faucetPending` at payout submission so a mid-poll `phase-131` streak-multiplier ramp or kill-switch never mutates or double-submits an in-flight claim. `lib/distributor-refill.ts` and `app/api/cron/faucet-health/route.ts` check `evaluateFeatureFlag("phase-133", { runtimeOnly: true })` before reserving funds or calling Soroban RPC.
 - Admin route & drill runner: `GET/POST /api/admin/feature-flags` (guarded by `PHASE_ADMIN_KEY` / `ADMIN_API_TOKEN` with `timingSafeEqual`) supports CAS-versioned rule updates (`expectedVersion` / `If-Match` → `409 VERSION_CONFLICT`), emergency kill-switches, and `runKillSwitchDrill()`.
 
+## 21. Dependency-update cadence automation with grouped Soroban and Stellar updates (spike 608)
+
+Flag: `phase-175` (`NEXT_PUBLIC_FEATURE_PHASE_175` / `FEATURE_PHASE_175`). Default off. Rollback: unset var, restart.
+
+- Unified Stellar SDK & lockfiles: `scripts/package.json` and `scripts/package-lock.json` upgraded from `@stellar/stellar-sdk` `^12.0.0` (`12.3.0`) to `^15.0.1` (`15.0.1`) to match root `package.json`, eliminating major SDK skew between CLI scripts (`deploy-phase-sep50.ts`, `interact.ts`, `setup-phase-v2.ts`) and Next.js routes (`app/api/faucet/route.ts`, `lib/phase-protocol.ts`).
+- Canonical WASM target & Soroban ABI pin: `scripts/package.json` `build:phase` and `optimize:phase` now target `wasm32-unknown-unknown` (matching `.github/workflows/ci.yml` and `scripts/deploy-phase-sep50.ts`, removing `wasm32v1-none` skew). Both `contracts/phase-protocol` and `contracts/mock-token` declare `[package.metadata.phase_cadence]` (`soroban_sdk_major = 22`, `soroban_abi_version = 22000`, `stellar_cli_version = "23.0.0"`) and expose `pub fn soroban_abi_version(_env: Env) -> u32 { 22_000 }`.
+- Grouped cadence & CI gate: `.github/dependabot.yml` groups `@stellar/*` + `@creit.tech/stellar-wallets-kit` + `x402-stellar`, `next` + `react` + `react-dom`, `vitest` + `@vitest/coverage-v8`, and `soroban-*` Cargo updates on a weekly schedule. `npm run deps:cadence` (`scripts/check-dependency-cadence.ts` / `lib/dependency-cadence.ts`) runs in `.github/workflows/ci.yml`, `dependency-audit.yml`, and `secret-rotation.yml`.
+
+
 
 
 

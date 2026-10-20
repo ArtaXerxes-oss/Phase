@@ -1397,6 +1397,12 @@ export const phaseCopy: Record<
       drillPassed: "Kill-switch & rollout drill verified",
       versionConflict: "Concurrent operator update detected (version conflict)",
     },
+    dependencyCadence: {
+      title: "Dependency Cadence & Soroban Parity",
+      sdkAligned: "Stellar SDK v15 and Soroban ABI 22000 aligned across app and scripts",
+      skewDetected: "Dependency or WASM target skew detected ({code})",
+      bytecodeGateBlocked: "WASM bytecode changed without a verified staging dry-run",
+    },
   },
 
 
@@ -2062,6 +2068,12 @@ export const phaseCopy: Record<
       rolloutLabel: "Despliegue gradual ({bps} bps)",
       drillPassed: "Simulacro de kill-switch y despliegue verificado",
       versionConflict: "Actualización concurrente de operador detectada (conflicto de versión)",
+    },
+    dependencyCadence: {
+      title: "Cadencia de Dependencias y Paridad Soroban",
+      sdkAligned: "Stellar SDK v15 y Soroban ABI 22000 alineados entre app y scripts",
+      skewDetected: "Desfase de dependencias o target WASM detectado ({code})",
+      bytecodeGateBlocked: "El bytecode WASM cambió sin una prueba previa en staging verificada",
     },
   },
 

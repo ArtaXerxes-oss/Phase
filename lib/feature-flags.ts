@@ -72,6 +72,7 @@
  * - phase-172: biometric unlock for returning wallets with OS-gated session (spike 628 / issue #491)
  * - phase-173: Horizon-backed per-wallet transaction history timeline (spike 629 / issue #492)
  * - phase-174: feature-flag ops: staged rollout, per-wallet targeting and kill-switch drills (spike 607 / issue #471)
+ * - phase-175: dependency-update cadence automation with grouped Soroban and Stellar updates (spike 608 / issue #472)
  */
 
 import { incSecurityCounter } from "@/lib/security-counters";
@@ -158,7 +159,8 @@ export type PhaseFeatureFlag =
   | "phase-171"
   | "phase-172"
   | "phase-173"
-  | "phase-174";
+  | "phase-174"
+  | "phase-175";
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-50": ["NEXT_PUBLIC_FEATURE_PHASE_50", "FEATURE_PHASE_50"],
@@ -243,6 +245,7 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-172": ["NEXT_PUBLIC_FEATURE_PHASE_172", "FEATURE_PHASE_172"],
   "phase-173": ["NEXT_PUBLIC_FEATURE_PHASE_173", "FEATURE_PHASE_173"],
   "phase-174": ["NEXT_PUBLIC_FEATURE_PHASE_174", "FEATURE_PHASE_174"],
+  "phase-175": ["NEXT_PUBLIC_FEATURE_PHASE_175", "FEATURE_PHASE_175"],
 };
 
 /** Canonical ordered list of all feature flags (fixes prior missing phase-134/135 & duplicate phase-128). */
@@ -329,6 +332,7 @@ export const ALL_FEATURE_FLAGS: readonly PhaseFeatureFlag[] = [
   "phase-172",
   "phase-173",
   "phase-174",
+  "phase-175",
 ] as const;
 
 function isTruthy(v: string | undefined): boolean {

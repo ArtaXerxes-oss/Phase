@@ -525,6 +525,11 @@ impl MockToken {
             .map(|m: TokenMetadata| m.symbol)
             .unwrap_or_else(|| String::from_str(&env, "MOCK"))
     }
+
+    /// Spike 608: Exposes the pinned Soroban SDK / ABI version (`22000` for soroban-sdk 22.0.0).
+    pub fn soroban_abi_version(_env: Env) -> u32 {
+        22_000
+    }
 }
 
 #[cfg(test)]

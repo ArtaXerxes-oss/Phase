@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Spike 608 (phase-175): bonded with next 16.2.2 + react 19.2.0 + @stellar/stellar-sdk ^15.0.1
   transpilePackages: ["@creit.tech/stellar-wallets-kit"],
   // Rust build trees are committed in this repo; exclude from serverless traces (250 MB limit on Vercel).
   outputFileTracingExcludes: {

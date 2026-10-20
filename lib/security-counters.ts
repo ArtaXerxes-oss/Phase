@@ -74,7 +74,11 @@ export type SecurityCounterName =
   | "flag_rollout_evaluated"
   | "flag_targeting_override_hit"
   | "flag_ops_stale_fallback"
-  | "flag_ops_version_conflict";
+  | "flag_ops_version_conflict"
+  | "dep_cadence_audit_passed"
+  | "dep_cadence_skew_detected"
+  | "dep_wasm_bytecode_drift"
+  | "dep_sdk_parity_verified";
 
 
 const counters = new Map<SecurityCounterName, number>()

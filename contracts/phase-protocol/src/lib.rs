@@ -1872,6 +1872,12 @@ impl PhaseProtocol {
             .get(&DataKey::RaffleEntry(collection_id, entrant))
             .unwrap_or(0)
     }
+
+    /// Spike 608: Exposes the pinned Soroban SDK / ABI version (`22000` for soroban-sdk 22.0.0)
+    /// so grouped dependency updates and staging dry-runs can verify WASM ABI parity.
+    pub fn soroban_abi_version(_env: Env) -> u32 {
+        22_000
+    }
 }
 
 #[cfg(test)]
