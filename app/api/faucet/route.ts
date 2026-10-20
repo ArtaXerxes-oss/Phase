@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { serverDataJsonPath } from "@/lib/server-data-paths"
+import { withFileLock } from "@/lib/json-store"
 import {
   classicLiqIssuerForStellarToml,
   expectedClassicPhaserLiqSorobanContractId,
@@ -142,40 +143,44 @@ function claimsFilePath() {
 }
 
 async function readClaims(): Promise<FaucetClaims> {
-  try {
-    const raw = await readFile(claimsFilePath(), "utf8")
-    const parsed = JSON.parse(raw) as Record<string, number | WalletClaims>
-    if (!parsed || typeof parsed !== "object") return {}
-    const normalized: FaucetClaims = {}
-    for (const [wallet, value] of Object.entries(parsed)) {
-      if (typeof value === "number") {
-        normalized[wallet] = { genesisAt: value }
-        continue
+  return withFileLock(claimsFilePath(), async () => {
+    try {
+      const raw = await readFile(claimsFilePath(), "utf8")
+      const parsed = JSON.parse(raw) as Record<string, number | WalletClaims>
+      if (!parsed || typeof parsed !== "object") return {}
+      const normalized: FaucetClaims = {}
+      for (const [wallet, value] of Object.entries(parsed)) {
+        if (typeof value === "number") {
+          normalized[wallet] = { genesisAt: value }
+          continue
+        }
+        if (!value || typeof value !== "object") continue
+        const fp = value.faucetPending
+        let faucetPending: WalletClaims["faucetPending"]
+        if (fp && typeof fp === "object" && typeof fp.hash === "string" && typeof fp.at === "number") {
+          const r = await parseRewardType(fp.reward)
+          faucetPending = { hash: fp.hash, reward: r, at: fp.at }
+        }
+        normalized[wallet] = {
+          genesisAt: typeof value.genesisAt === "number" ? value.genesisAt : undefined,
+          dailyAt: typeof value.dailyAt === "number" ? value.dailyAt : undefined,
+          quests: value.quests && typeof value.quests === "object" ? value.quests : {},
+          faucetPending,
+        }
       }
-      if (!value || typeof value !== "object") continue
-      const fp = value.faucetPending
-      let faucetPending: WalletClaims["faucetPending"]
-      if (fp && typeof fp === "object" && typeof fp.hash === "string" && typeof fp.at === "number") {
-        const r = await parseRewardType(fp.reward)
-        faucetPending = { hash: fp.hash, reward: r, at: fp.at }
-      }
-      normalized[wallet] = {
-        genesisAt: typeof value.genesisAt === "number" ? value.genesisAt : undefined,
-        dailyAt: typeof value.dailyAt === "number" ? value.dailyAt : undefined,
-        quests: value.quests && typeof value.quests === "object" ? value.quests : {},
-        faucetPending,
-      }
+      return normalized
+    } catch {
+      return {}
     }
-    return normalized
-  } catch {
-    return {}
-  }
+  })
 }
 
 async function writeClaims(claims: FaucetClaims) {
-  const file = claimsFilePath()
-  await mkdir(path.dirname(file), { recursive: true })
-  await writeFile(file, JSON.stringify(claims, null, 2), "utf8")
+  return withFileLock(claimsFilePath(), async () => {
+    const file = claimsFilePath()
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(file, JSON.stringify(claims, null, 2), "utf8")
+  })
 }
 
 function faucetUsesDistributorTransfer(): boolean {
