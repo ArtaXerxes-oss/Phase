@@ -21,6 +21,7 @@ import {
 import { createGenerationJob } from "@/lib/generation-job-store"
 import { generateLoreStep } from "@/lib/forge/ai-pipeline"
 import { normalizeForgeImageStyleMode, normalizeForgeOutputLang } from "@/lib/forge/prompt-builder"
+import { isAnalyticsWarehouseEnabled, recordWarehouseEvent } from "@/lib/analytics-warehouse"
 
 export const runtime = "nodejs"
 export const maxDuration = 120
@@ -88,6 +89,14 @@ export async function POST(request: NextRequest) {
 
   const resolution = await verifyPaymentStep({ authHeader: auth, body, paymentRequirements })
   if (resolution === "facilitator_rejected") {
+    if (isAnalyticsWarehouseEnabled()) {
+      void recordWarehouseEvent({
+        surface: "forge",
+        stage: "forge_failed",
+        correlation_id: correlationId,
+        reason: "facilitator_rejected",
+      }).catch(() => {})
+    }
     return NextResponse.json(
       { success: false, error: ERR_SETTLEMENT_REJECTED },
       { status: 403, headers: { "x-correlation-id": correlationId } },
@@ -96,6 +105,14 @@ export async function POST(request: NextRequest) {
   if (resolution === "missing") return paymentRequiredResponse(request)
 
   if (receipt) {
+    if (isAnalyticsWarehouseEnabled()) {
+      void recordWarehouseEvent({
+        surface: "forge",
+        stage: "forge_paid",
+        correlation_id: correlationId,
+        metadata: { txHash: receipt },
+      }).catch(() => {})
+    }
     if (await isSettlementUsed(receipt)) {
       return NextResponse.json(
         { success: false, error: "Settlement already used" },

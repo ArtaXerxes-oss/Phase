@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { Keypair } from "@stellar/stellar-sdk"
 import { settleX402Challenge, type X402Challenge } from "@/lib/x402-agent-client"
 import { PHASER_LIQ_SYMBOL, REQUIRED_AMOUNT, stroopsToLiqDisplay } from "@/lib/phase-protocol"
+import { isAnalyticsWarehouseEnabled, recordWarehouseEvent } from "@/lib/analytics-warehouse"
 
 export const runtime = "nodejs"
 export const maxDuration = 180
@@ -326,6 +327,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<AgentForg
   const origin = request.nextUrl.origin
   const outputLang = normalizeAgentForgeLang(body.lang)
 
+  if (isAnalyticsWarehouseEnabled(payerAddress)) {
+    void recordWarehouseEvent({
+      surface: "forge",
+      stage: "agent_forge_started",
+      wallet: payerAddress,
+      metadata: { agentPublicKey, promptLength: prompt.length },
+    }).catch(() => {})
+  }
+
   // 4. Fetch the 402 payment challenge from /api/forge-agent
   let challenge: X402Challenge
   try {
@@ -387,6 +397,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<AgentForg
   const ipfsCid = await uploadImageToIpfs(imageUrl)
 
   const amountPaid = `${stroopsToLiqDisplay(String(challenge.amount))} ${PHASER_LIQ_SYMBOL}`
+
+  if (isAnalyticsWarehouseEnabled(payerAddress)) {
+    void recordWarehouseEvent({
+      surface: "forge",
+      stage: "agent_forge_settled",
+      wallet: payerAddress,
+      metadata: { txHash: settlementTxHash, amountPaid, ipfsCid },
+    }).catch(() => {})
+  }
 
   return NextResponse.json({
     success: true,
