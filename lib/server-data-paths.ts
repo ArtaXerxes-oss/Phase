@@ -50,6 +50,9 @@ const FILES = {
   legalHolds: "legal-holds.json",
   termsConsents: "terms-consents.json",
   legalDocuments: "legal-documents.json",
+  leaderboardEntries: "leaderboard-entries.json",
+  gdprErasureLog: "gdpr-erasure-log.json",
+  anomalyBaselines: "anomaly-baselines.json",
 } as const
 
 
