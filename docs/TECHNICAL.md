@@ -280,7 +280,7 @@ hook in `app/signals/[id]/use-signal-crdt.ts` posts on a short debounce and
 polls while the panel is open.
 
 **Metrics.** `lib/signal-version-metrics.ts` keeps process-local counters for
-`signal_version_conflicts` (split by `edit` / `put` / `upvote` / `reply`, and
+`signal_version_conflicts` (split by `edit` / `put` / `upvote` / `reply` / `vote`, and
 flagged separately when a CAS retry was attempted) plus `signal_crdt_merges`,
 `signal_crdt_concurrent_merges` and commit outcomes. The store is the only place
 that increments them, so a rejected CAS is counted once no matter how many layers
