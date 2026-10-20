@@ -135,7 +135,24 @@ export type SecurityCounterName =
   | "db_dual_write_drift"
   | "db_dual_write_shed"
   | "preview_isolation_violation"
-  | "preview_cron_blocked";
+  | "preview_cron_blocked"
+  | "leaderboard_entries_ingested"
+  | "leaderboard_scored"
+  | "leaderboard_farm_penalized"
+  | "leaderboard_sybil_discounted"
+  | "retention_sweep_runs"
+  | "retention_records_expired"
+  | "gdpr_erasure_completed"
+  | "gdpr_erasure_blocked"
+  | "gdpr_erasure_records"
+  | "warehouse_export_runs"
+  | "warehouse_records_redacted"
+  | "warehouse_export_failed"
+  | "anomaly_checks_run"
+  | "anomaly_volume_breaches"
+  | "anomaly_counter_breaches"
+  | "anomaly_balance_breaches"
+  | "anomaly_alerts_routed";
 
 
 const counters = new Map<SecurityCounterName, number>()

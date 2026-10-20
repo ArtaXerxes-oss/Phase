@@ -67,6 +67,10 @@
  * - phase-171: backup and disaster-recovery snapshots for sidecars, SQLite and the secrets map (spike 605 / issue #469)
  * - phase-172: SQLite to Postgres migration rehearsal with dual-write, parity and rollback (spike 604 / issue #468)
  * - phase-173: Vercel preview-environment isolation for data roots, secrets, contracts and cron (spike 603 / issue #467)
+ * - phase-178: leaderboard integrity with anti-farm scoring, time decay and sybil discount (spike 616 / issue #479)
+ * - phase-179: data retention and GDPR erasure with TTL sweeps and wallet deletion (spike 617 / issue #480)
+ * - phase-180: analytics warehouse export with Parquet and NDJSON, schema-versioned and redacted (spike 618 / issue #481)
+ * - phase-181: anomaly detection on volume, counters and balances with webhook alert routing (spike 619 / issue #482)
  */
 
 export type PhaseFeatureFlag =
@@ -74,6 +78,10 @@ export type PhaseFeatureFlag =
   | "phase-175"
   | "phase-176"
   | "phase-177"
+  | "phase-178"
+  | "phase-179"
+  | "phase-180"
+  | "phase-181"
 
   | "phase-66"
   | "phase-77"
@@ -168,6 +176,10 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-175": ["NEXT_PUBLIC_FEATURE_PHASE_175", "FEATURE_PHASE_175"],
   "phase-176": ["NEXT_PUBLIC_FEATURE_PHASE_176", "FEATURE_PHASE_176"],
   "phase-177": ["NEXT_PUBLIC_FEATURE_PHASE_177", "FEATURE_PHASE_177"],
+  "phase-178": ["NEXT_PUBLIC_FEATURE_PHASE_178", "FEATURE_PHASE_178"],
+  "phase-179": ["NEXT_PUBLIC_FEATURE_PHASE_179", "FEATURE_PHASE_179"],
+  "phase-180": ["NEXT_PUBLIC_FEATURE_PHASE_180", "FEATURE_PHASE_180"],
+  "phase-181": ["NEXT_PUBLIC_FEATURE_PHASE_181", "FEATURE_PHASE_181"],
   "phase-66": ["NEXT_PUBLIC_FEATURE_PHASE_66", "FEATURE_PHASE_66"],
   "phase-77": ["NEXT_PUBLIC_FEATURE_PHASE_77", "FEATURE_PHASE_77"],
   "phase-78": ["NEXT_PUBLIC_FEATURE_PHASE_78", "FEATURE_PHASE_78"],
@@ -272,6 +284,10 @@ export function isFeatureEnabled(flag: PhaseFeatureFlag): boolean {
     "phase-175": process.env.NEXT_PUBLIC_FEATURE_PHASE_175,
     "phase-176": process.env.NEXT_PUBLIC_FEATURE_PHASE_176,
     "phase-177": process.env.NEXT_PUBLIC_FEATURE_PHASE_177,
+    "phase-178": process.env.NEXT_PUBLIC_FEATURE_PHASE_178,
+    "phase-179": process.env.NEXT_PUBLIC_FEATURE_PHASE_179,
+    "phase-180": process.env.NEXT_PUBLIC_FEATURE_PHASE_180,
+    "phase-181": process.env.NEXT_PUBLIC_FEATURE_PHASE_181,
   };
   if (isTruthy(newFlags[flag])) return true;
   // Public keys are checked first so the same helper works in browser and server code.
@@ -305,6 +321,7 @@ export function getEnabledFeatureFlags(): PhaseFeatureFlag[] {
   // Keep enumeration explicit so dashboards have stable, reviewable flag order.
   const all: PhaseFeatureFlag[] = [
     "phase-174", "phase-175", "phase-176", "phase-177",
+    "phase-178", "phase-179", "phase-180", "phase-181",
     "phase-66",
     "phase-77",
     "phase-78",
