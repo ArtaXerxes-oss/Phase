@@ -44,6 +44,9 @@ const FILES = {
   authSessions: "auth-sessions.json",
   ageDeclarations: "age-declarations.json",
   licenseAttestations: "license-attestations.json",
+  termsConsents: "terms-consents.json",
+  legalDocuments: "legal-documents.json",
+  legalHolds: "legal-holds.json",
   qrAudit: "qr-audit.json",
   walletSessions: "wallet-sessions.json",
   ledgerAudit: "ledger-audit.json",
@@ -54,6 +57,9 @@ const FILES = {
   legalHolds: "legal-holds.json",
   termsConsents: "terms-consents.json",
   legalDocuments: "legal-documents.json",
+  leaderboardEntries: "leaderboard-entries.json",
+  gdprErasureLog: "gdpr-erasure-log.json",
+  anomalyBaselines: "anomaly-baselines.json",
 } as const
 
 

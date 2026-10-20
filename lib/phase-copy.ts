@@ -1503,6 +1503,19 @@ export const phaseCopy: Record<
       blindSigningDisabled: "Blind signing is disabled in Ledger Stellar app settings. Set to Enabled or Clear signing to continue.",
       gate13RiskAlert: "Contract Execution Blocked: Gate #13 Pre-empted (SelfTransfer or invalid authorization).",
     },
+    featureFlagOps: {
+      title: "Feature-Flag Operations & Kill-Switch",
+      killSwitchActive: "Emergency kill-switch active — server writes halted for this flag",
+      rolloutLabel: "Staged rollout ({bps} bps)",
+      drillPassed: "Kill-switch & rollout drill verified",
+      versionConflict: "Concurrent operator update detected (version conflict)",
+    },
+    dependencyCadence: {
+      title: "Dependency Cadence & Soroban Parity",
+      sdkAligned: "Stellar SDK v15 and Soroban ABI 22000 aligned across app and scripts",
+      skewDetected: "Dependency or WASM target skew detected ({code})",
+      bytecodeGateBlocked: "WASM bytecode changed without a verified staging dry-run",
+    },
   },
 
 
@@ -2217,6 +2230,19 @@ export const phaseCopy: Record<
       cancelButton: "Cancelar",
       blindSigningDisabled: "Firma ciega deshabilitada en la app Stellar del Ledger. Habilitá Blind signing en Configuración.",
       gate13RiskAlert: "Ejecución bloqueada: Gate #13 prevenido (auto-transferencia o autorización inválida).",
+    },
+    featureFlagOps: {
+      title: "Operaciones de Feature Flags y Kill-Switch",
+      killSwitchActive: "Kill-switch de emergencia activo — escrituras del servidor detenidas para este flag",
+      rolloutLabel: "Despliegue gradual ({bps} bps)",
+      drillPassed: "Simulacro de kill-switch y despliegue verificado",
+      versionConflict: "Actualización concurrente de operador detectada (conflicto de versión)",
+    },
+    dependencyCadence: {
+      title: "Cadencia de Dependencias y Paridad Soroban",
+      sdkAligned: "Stellar SDK v15 y Soroban ABI 22000 alineados entre app y scripts",
+      skewDetected: "Desfase de dependencias o target WASM detectado ({code})",
+      bytecodeGateBlocked: "El bytecode WASM cambió sin una prueba previa en staging verificada",
     },
   },
 

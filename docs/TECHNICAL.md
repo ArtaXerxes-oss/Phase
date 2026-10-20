@@ -780,3 +780,47 @@ Flag: `phase-173` (`NEXT_PUBLIC_FEATURE_PHASE_173` / `FEATURE_PHASE_173`). Defau
 - `app/api/cron/faucet-health/route.ts`: preview runs return `{ skipped: "preview_cron_disabled" }` unless `PHASE_PREVIEW_CRON_ENABLED=1`; the unauthenticated-header shortcut is disabled in previews.
 - Caveat: Vercel `/tmp` is per-instance, so namespacing prevents cross-preview bleed, not loss between instances.
 - Counters: `preview_isolation_violation`, `preview_cron_blocked`.
+
+## 24. Leaderboard integrity: anti-farm scoring, decay and sybil discount (spike 616)
+
+Flag: `phase-178` (`NEXT_PUBLIC_FEATURE_PHASE_178` / `FEATURE_PHASE_178`). Default off. See `PROJECT_ARCHITECTURE.md` §10 and `docs/spikes/616-leaderboard-integrity-findings.md`.
+
+- `lib/leaderboard-integrity.ts`: `scoreLeaderboardCandidate` computes `finalScore = decayedPoints × farmPenalty × sybilDiscount` from an explicit `now`. Decay is `0.5 ** (age / 7d)` (same shape as the pricing oracle's wash discount). `detectFarmPatterns` multiplies down per rule — `event_burst` (×0.5, >12 events in 1h), `counterparty_concentration` (×0.6, one counterparty >80% of ≥6 counterpartied events), `point_velocity` (×0.7, >1000 points/day) — floored at `farmPenaltyFloor` 0.15. `sybilDiscountFor`: trusted 1, caution 0.7, suspect 0.35, missing band = caution.
+- Routes: `GET /api/leaderboard?limit=` ranks stored entries (ties break by wallet asc); `POST /api/leaderboard` requires `x-admin-key` and scores before persisting, so malformed events never reach `leaderboard-entries.json`.
+- Counters: `leaderboard_entries_ingested`, `leaderboard_scored`, `leaderboard_farm_penalized`, `leaderboard_sybil_discounted`.
+- Not covered: fetching sybil bands from Horizon inside the route (callers supply the band from phase-145 helpers).
+
+## 25. Retention TTL sweeps and GDPR erasure (spike 617)
+
+Flag: `phase-179` (`NEXT_PUBLIC_FEATURE_PHASE_179` / `FEATURE_PHASE_179`). Default off. See `docs/spikes/617-retention-gdpr-erasure-findings.md`.
+
+- `lib/retention-erasure.ts` sweeps: `sweepByTimestamp` (pure; records with a missing/non-finite timestamp are KEPT), `sweepAuthSessions` (expired SEP-10 sessions — `expires_at` normalized from seconds to ms — and consumed challenges past 24h), `sweepNotificationStore` (90-day notifications, empty wallet buckets dropped). `runRetentionSweeps()` applies both through `updateStore` and counts `retention_sweep_runs` / `retention_records_expired`.
+- `executeWalletErasure(wallet)`: validates the `G...` address, runs `assertNoLegalHold("wallet", …, "erasure")` (a hit → `RetentionErasureError LEGAL_HOLD_ACTIVE`, HTTP 423 in the route, `gdpr_erasure_blocked` counted, nothing deleted), then erases five registered domains (`ERASURE_TARGETS`: notifications, age declarations, follows, push subscriptions, auth sessions) and appends a receipt to `gdpr-erasure-log.json` — fingerprint only, capped at 1000 receipts, schema `phase-gdpr-article-17-erasure` 1.0.0.
+- Deliberate exclusion: `terms-consents.json` is never erased (Art. 17(3)(b) proof of legal basis). SQLite tables are a documented partial slice.
+- `POST /api/user/erasure`: fail-closed auth — admin key (`checkAdminKey`) or a matching `x-wallet-address`/`acting_wallet` header; missing header 401, mismatch 403, hold 423.
+- `GET /api/cron/retention-sweep`: daily 03:15 UTC, `validateCronAuth` + `isCronBlockedInPreview` + `isRestoreInProgress` (503 + `Retry-After`).
+
+## 26. Analytics warehouse export: Parquet and NDJSON (spike 618)
+
+Flag: `phase-180` (`NEXT_PUBLIC_FEATURE_PHASE_180` / `FEATURE_PHASE_180`). Default off. See `docs/spikes/618-analytics-warehouse-export-findings.md`.
+
+- `lib/analytics-warehouse.ts`: flat `WarehouseRow` (`table`, `ts`, `metric`, `value`, `status`, `wallet_fingerprint`) collected from the security-counter snapshot, distributor health history, and wash-excluded accepted-offer volume (`wash_flagged = 0`, matching `lib/wash-screening.ts` aggregates).
+- Redaction is unconditional: `redactWarehouseRow` fingerprints raw `G...` fields and rewrites wallet/secret-looking text in `metric`/`status`; it is idempotent (uses a fresh non-global regex because `WALLET_KEY_RE` is `/g` and `.test()` on it is stateful).
+- Manifest (`buildWarehouseManifest`): `phase-warehouse-export` 1.0.0, `generated_at`, `row_count`, sorted `tables`, `redacted: true`, `checksum` = sha256 over the rows-only NDJSON body (reproducible across formats; mirrored in `X-Warehouse-Checksum`).
+- Formats: NDJSON emits the manifest as line 1 then one row per line (`application/x-ndjson`); Parquet uses `hyparquet-writer`'s `parquetWriteBuffer` with typed columns and the manifest in `key_value_metadata` (`phase.schema_version`, `phase.checksum`, `phase.redacted`).
+- `GET /api/analytics/export?format=ndjson|parquet`: `checkAdminKey` fail-closed (401 unconfigured/denied), 400 on unknown format, `Content-Disposition` attachment, headers `X-Warehouse-Schema-Version` + `X-Warehouse-Checksum`.
+- Counters: `warehouse_export_runs`, `warehouse_records_redacted`, `warehouse_export_failed`.
+
+## 27. Anomaly detection with alert routing (spike 619)
+
+Flag: `phase-181` (`NEXT_PUBLIC_FEATURE_PHASE_181` / `FEATURE_PHASE_181`). Default off. See `docs/spikes/619-anomaly-detection-findings.md`.
+
+- `lib/anomaly-detection.ts` detectors over one `AnomalySample`:
+  - volume — `robustStats` (median + MAD×1.4826 → stddev fallback → σ floor 1e-9 so a flat baseline with a non-zero value still breaches), `z ≥ 3.5` warning / `≥ 6` critical, `minSamples` 8.
+  - counters — `counterDeltas` per run (resets and first-seen keys skipped), z-scored like volume; `collectAnomalySample` excludes `anomaly_*` counters so the detector cannot alert on itself.
+  - balances — `detectBalanceDrops`: ≥15% warning, ≥35% critical vs the previous run; no baseline needed.
+- Baseline hygiene: `detectAnomalies` measures BEFORE pushing, so a sample never pollutes its own reference; history rings cap at `maxHistory` 100 in `anomaly-baselines.json` (schema `phase-anomaly-baselines` 1.0.0).
+- `routeAnomalyAlerts` fans findings out through `sendWebhookAlert` with titles `Anomaly <kind>: <metric>` — distinct per kind+metric so the 15-minute `type:title` dedup cannot mask a second metric; attempts count `anomaly_alerts_routed`.
+- `GET /api/cron/anomaly-detect`: hourly at minute 5, `validateCronAuth` + preview fence + restore marker, then `collectAnomalySample` (volume SQL, counter snapshot, latest distributor health balances) → `detectAnomalies` → persist → route alerts → respond with findings.
+- Counters: `anomaly_checks_run`, `anomaly_volume_breaches`, `anomaly_counter_breaches`, `anomaly_balance_breaches`, `anomaly_alerts_routed`.
+- Not covered: per-channel alert thresholds, alert suppression windows beyond the webhook dedup, and a volume baseline warmer than one value per run.

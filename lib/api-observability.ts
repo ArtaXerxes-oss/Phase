@@ -54,11 +54,29 @@ export function createApiRequestContext(request: NextRequest, route: string) {
     const response = NextResponse.json(body, { ...responseInit, status, headers })
     response.headers.set(CORRELATION_HEADER, correlationId)
     response.headers.set(REQUEST_ID_HEADER, correlationId)
+    const durationMs = Date.now() - startedAt
+    const boundedMetadata = sanitizeAnalyticsMetadata(metadata)
     log(status >= 500 ? "error" : status >= 400 ? "warn" : "info", event, {
       status,
-      durationMs: Date.now() - startedAt,
-      ...metadata,
+      durationMs,
+      ...boundedMetadata,
     })
+
+    if (isAnalyticsWarehouseEnabled()) {
+      void recordWarehouseEvent({
+        surface: "observability",
+        stage: event,
+        correlation_id: correlationId,
+        metadata: {
+          route,
+          method: request.method,
+          status,
+          durationMs,
+          ...boundedMetadata,
+        },
+      }).catch(() => {})
+    }
+
     return response
   }
 
