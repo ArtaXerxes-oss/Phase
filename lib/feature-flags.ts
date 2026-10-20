@@ -6,6 +6,7 @@
  *
  * Flags:
  * - phase-79: watchlist notifications for price drops
+ * - phase-80: fractional ownership for high-value artifacts (co-ownership, listing, purchase)
  * - phase-88: on-chain follow suggestions
  * - phase-89: scheduled signal broadcast queues
  * - phase-90: community polls as a signal subtype
@@ -70,6 +71,7 @@ export type PhaseFeatureFlag =
   | "phase-77"
   | "phase-78"
   | "phase-79"
+  | "phase-80"
   | "phase-84"
   | "phase-85"
   | "phase-86"
@@ -145,6 +147,7 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-77": ["NEXT_PUBLIC_FEATURE_PHASE_77", "FEATURE_PHASE_77"],
   "phase-78": ["NEXT_PUBLIC_FEATURE_PHASE_78", "FEATURE_PHASE_78"],
   "phase-79": ["NEXT_PUBLIC_FEATURE_PHASE_79", "FEATURE_PHASE_79"],
+  "phase-80": ["NEXT_PUBLIC_FEATURE_PHASE_80", "FEATURE_PHASE_80"],
   "phase-84": ["NEXT_PUBLIC_FEATURE_PHASE_84", "FEATURE_PHASE_84"],
   "phase-85": ["NEXT_PUBLIC_FEATURE_PHASE_85", "FEATURE_PHASE_85"],
   "phase-86": ["NEXT_PUBLIC_FEATURE_PHASE_86", "FEATURE_PHASE_86"],
