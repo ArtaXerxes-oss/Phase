@@ -331,28 +331,52 @@ export async function cancelScheduledSignal(
   return rowToSignal({ ...row, status: "cancelled" });
 }
 
+/**
+ * Cast (or move) a wallet's poll vote, guarded by the `version` column.
+ *
+ * `poll_json` is a JSON blob, so voting is a read-modify-write. Without a
+ * guard, two instances that read the same row would each write back their own
+ * copy and one vote would vanish. Same pattern as `upvoteSignal`: the UPDATE
+ * is `WHERE id = ? AND version = ?`, and a lost race re-reads and recomputes.
+ */
 export async function voteOnPoll(
   signalId: string,
   optionId: string,
   wallet: string,
 ): Promise<Signal> {
-  const row = getSignalRow(signalId);
-  if (!row || row.type !== "poll" || !row.poll_json)
-    throw new Error("Poll not found");
-  const poll = JSON.parse(row.poll_json) as SignalPoll;
-  if (poll.closes_at && poll.closes_at <= Date.now())
-    throw new Error("Poll is closed");
-  const selected = poll.options.find((option) => option.id === optionId);
-  if (!selected) throw new Error("Poll option not found");
-  for (const option of poll.options) {
-    option.voters = option.voters.filter((voter) => voter !== wallet);
-  }
-  selected.voters.push(wallet);
+  const db = getDb();
+  const update = db.prepare(
+    `UPDATE signals
+        SET poll_json = ?, version = ?
+      WHERE id = ? AND version = ?`,
+  );
 
-  getDb()
-    .prepare("UPDATE signals SET poll_json = ? WHERE id = ?")
-    .run(JSON.stringify(poll), signalId);
-  return rowToSignal({ ...row, poll_json: JSON.stringify(poll) });
+  for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
+    const row = getSignalRow(signalId);
+    if (!row || row.type !== "poll" || !row.poll_json)
+      throw new Error("Poll not found");
+    const poll = JSON.parse(row.poll_json) as SignalPoll;
+    if (poll.closes_at && poll.closes_at <= Date.now())
+      throw new Error("Poll is closed");
+    const selected = poll.options.find((option) => option.id === optionId);
+    if (!selected) throw new Error("Poll option not found");
+    for (const option of poll.options) {
+      option.voters = option.voters.filter((voter) => voter !== wallet);
+    }
+    selected.voters.push(wallet);
+
+    const pollJson = JSON.stringify(poll);
+    const nextVersion = row.version + 1;
+    const result = update.run(pollJson, nextVersion, signalId, row.version);
+    if (result.changes === 1) {
+      return rowToSignal({ ...row, poll_json: pollJson, version: nextVersion });
+    }
+    // Lost the CAS: a peer committed between our read and our write.
+    recordSignalVersionConflict("vote", { retried: true });
+  }
+
+  const current = getSignalRow(signalId);
+  throw new VersionConflictError(current ? current.version : 0);
 }
 
 /**
