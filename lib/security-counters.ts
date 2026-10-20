@@ -118,15 +118,24 @@ export type SecurityCounterName =
   | "ledger_clear_signing_rejected"
   | "ledger_blind_signing_blocked"
   | "ledger_gate13_preempted"
-  | "deep_link_rejected"
-  | "deep_link_resolved"
-  | "compliance_allowed"
-  | "compliance_denied"
-  | "compliance_unavailable"
-  | "compliance_webhook_replay"
-  | "tax_event_recorded"
-  | "tax_exported"
-  | "market_accept_conflict";
+  | "log_pipeline_enqueued"
+  | "log_pipeline_sampled_out"
+  | "log_pipeline_dropped"
+  | "log_pipeline_redacted"
+  | "log_pipeline_flush_ok"
+  | "log_pipeline_flush_failed"
+  | "backup_snapshot_created"
+  | "backup_snapshot_verified"
+  | "backup_snapshot_corrupt"
+  | "backup_restore_completed"
+  | "backup_restore_blocked"
+  | "db_parity_checked"
+  | "db_parity_mismatch"
+  | "db_dual_write_ok"
+  | "db_dual_write_drift"
+  | "db_dual_write_shed"
+  | "preview_isolation_violation"
+  | "preview_cron_blocked";
 
 
 const counters = new Map<SecurityCounterName, number>()

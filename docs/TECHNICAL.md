@@ -419,6 +419,11 @@ NEXT_PUBLIC_FEATURE_PHASE_158=1
 NEXT_PUBLIC_FEATURE_PHASE_159=1
 NEXT_PUBLIC_FEATURE_PHASE_160=1
 NEXT_PUBLIC_FEATURE_PHASE_161=1
+# Spikes 603/604/605/606 (issues #467/#468/#469/#470)
+NEXT_PUBLIC_FEATURE_PHASE_170=1
+NEXT_PUBLIC_FEATURE_PHASE_171=1
+NEXT_PUBLIC_FEATURE_PHASE_172=1
+NEXT_PUBLIC_FEATURE_PHASE_173=1
 # Server-only aliases also accepted: FEATURE_PHASE_104, etc.
 ```
 
@@ -695,17 +700,46 @@ Flag: `phase-169` (`NEXT_PUBLIC_FEATURE_PHASE_169` / `FEATURE_PHASE_169`). Defau
 - Audit counters: `ledger_clear_signing_reviewed`, `ledger_clear_signing_approved`, `ledger_clear_signing_rejected`, `ledger_blind_signing_blocked`, `ledger_gate13_preempted` in `lib/security-counters.ts`.
 - Routes: `POST /api/wallet/ledger` for clear-signing lifecycle telemetry.
 
+## 20. Log pipeline: redaction, sampling and external sink (spike 606)
 
+Flag: `phase-170` (`NEXT_PUBLIC_FEATURE_PHASE_170` / `FEATURE_PHASE_170`). Default off. See `PROJECT_ARCHITECTURE.md` §10 and `docs/spikes/606-log-pipeline-findings.md`.
 
+- `lib/log-pipeline.ts`: `redactLogValue` (masks `S...` seeds and secret-named keys such as `rawPayload`, `errorResult`, `authorization`; cycle/depth safe), `shouldSampleLog` (warn/error always kept, info sampled by FNV hash of the correlation id so a request is kept or dropped whole), `toPipelineRecord` (only `level`, `event`, `route`, `method`, `status_class` are labels; wallets, CIDs, token ids, hashes stay unindexed in `fields`), and `LogPipeline` (bounded buffer, drop-oldest, single-flight flush, abort timeout, at-most-once delivery).
+- `lib/api-observability.ts`: every `log()` goes through `emitLog`, so the console line is redacted too when the flag is on.
+- Env: `LOG_SINK_URL` (https only, validated in `serverEnvSchema`), `LOG_SINK_TOKEN`, `LOG_SAMPLE_RATE_INFO` (0..1, default 0.1), `LOG_SINK_BATCH_SIZE`, `LOG_SINK_MAX_BUFFER`, `LOG_SINK_FLUSH_MS`, `LOG_SINK_TIMEOUT_MS`.
+- Counters (`lib/security-counters.ts`): `log_pipeline_enqueued`, `_sampled_out`, `_dropped`, `_redacted`, `_flush_ok`, `_flush_failed`.
+- Not covered: `waitUntil`-style flush on serverless freeze, counter export, migrating ad-hoc `console.*` callers.
 
+## 21. Backup and disaster recovery (spike 605)
 
-## Spikes 620/621/630/631 — mobile, inbound links, screening and CSV
+Flag: `phase-171` (`NEXT_PUBLIC_FEATURE_PHASE_171` / `FEATURE_PHASE_171`). Default off. See `docs/spikes/605-backup-dr-findings.md`.
 
-Flags `phase-174` through `phase-177` default off. Set literal public flags at build time for browser features; server-only flags cannot enable browser UI. Rollback requires unsetting both public/server flags and rebuilding/restarting. New SQLite tables are additive and stay inert when their features are off; do not delete reporting evidence during rollback. No contract deployment, token migration, issuer rotation or gateway change is part of these spikes.
+- `lib/backup-snapshot.ts`: `createSnapshot` locks every sidecar path (sorted, via `withFileLock`) and takes the SQLite image with `VACUUM INTO`, so the set and the database share one logical instant and no WAL copy is involved; a corrupt sidecar fails the snapshot. `verifySnapshot` re-hashes, parses JSON, runs `integrity_check` and `foreign_key_check`, and compares per-table row counts. `restoreSnapshot` verifies first, removes stale `-wal`/`-shm`, writes tmp+rename, and holds `.restore-in-progress` (stale after 10 min).
+- `app/api/cron/faucet-health/route.ts`: returns `503` + `Retry-After: 60` while the marker is fresh, so a refill cannot run against half-restored distributor state.
+- Secrets: never written to a snapshot. `sealSecrets`/`openSecrets` use AES-256-GCM with a scrypt key (passphrase ≥ 16 chars); failures never echo plaintext; `diffSecretsMap` reports drift by name only.
+- `lib/server-data-paths.ts`: `serverDataRoot`, `serverDataFileKeys`, `serverDataFileName` exported so backups cannot drift from the file table.
+- Drill: `npm run backup:drill` (snapshot → verify → restore to scratch → SQLite parity).
+- Restore replaces the database file: close the connection (`resetDbForTests`) and run offline for the live root.
+- Counters: `backup_snapshot_created|verified|corrupt`, `backup_restore_completed|blocked`.
 
-- Mobile layout: one responsive breakpoint at 768px; `useMobileViewport` publishes the actual viewport height and cleans up listeners. Radix sheets provide focus management and Escape handling; custom Forge/Chamber overlays trap phone focus and restore the opener. Pointer capture keeps drawing inside the canvas without stealing page scroll elsewhere.
-- Link capture: `phase://quest/ID`, `stellar://phase/quest/ID`, and same-origin `/link/quest/ID` share a parser. Offer paths contain listing and offer IDs; collection IDs are positive safe integers. Arbitrary callbacks, other origins, duplicate parameters and invalid G addresses are rejected. Capture survives wallet connection in sessionStorage without initiating a claim or signing. Target actions revalidate server-side. Browser fallback `/link` accepts pasted custom URIs; SEP-7 `pay`/`tx` requests are deliberately rejected rather than reinterpreted as Soroban intents.
-- Compliance: `PHASE_KYC_MODE=off|mock|live`, threshold in exact stroops. Each protected request screens against the configured HTTPS adapter (3s timeout, no redirect/cache). A result older than one hour or already expired fails closed. Webhook signing format is HMAC-SHA256(timestamp + '.' + raw UTF-8 body), with millisecond timestamps and 5-minute skew. Providers must bind subjects to wallets before invoking this operator adapter. `expectedVersion` starts at zero; stale callbacks return 409/current_version. 2FA and identity verification remain separate.
-- Reporting: confirmed faucet/bootstrap receipts and unverified marketplace agreements enter `tax_events` with stable event keys. No historical basis/FX reconstruction is invented. Export requires a SEP-53 signature binding wallet, network, UTC range, policy, expiry and nonce. Private no-store responses carry a safe attachment filename and X-Tax-Snapshot. Each CSV record carries a chained recomputation hash. Pages use `(occurred_at, seq)` ordering at a frozen maximum sequence; same-time records cannot fall between pages. Wash/unverified records remain visibly flagged and excluded from proceeds/gains/income.
+## 22. SQLite to Postgres migration rehearsal (spike 604)
 
-API request/response details and outstanding live proof requirements are in [mobile integration API](api/mobile-integration.md) and [spike evidence](spikes/620-621-630-631-integration.md).
+Flag: `phase-172` (`NEXT_PUBLIC_FEATURE_PHASE_172` / `FEATURE_PHASE_172`). Default off. See `docs/spikes/604-postgres-rehearsal-findings.md`.
+
+- `lib/db-parity.ts`: `toPositionalParams`, `sqliteTypeToPostgres` (integer flags stay `BIGINT` so parity compares like with like), `buildPostgresCreateTable`, `buildPostgresUpsert` (explicit conflict target replaces `INSERT OR REPLACE`), `perTestSchemaName`, `compareSources`/`compareTable` (value diffs, `type_coercion`, order-independent checksum), `DualWriter`.
+- Dual-write ordering: primary (SQLite) first and authoritative; secondary is bounded (`maxSecondaryInflight`, default 5) and timed out (1.5 s). Failures, timeouts and shed writes land in `driftLog()` and never throw. `setMode("primary-only")` is the rollback.
+- `PHASE_DATABASE_URL` + flag → `dual`; otherwise `primary-only`.
+- Check two databases with `npm run db:parity -- <left> <right>`.
+- Counters: `db_parity_checked`, `db_parity_mismatch`, `db_dual_write_ok|drift|shed`.
+- Not covered: a `pg` driver, async re-plumbing of the `MAX_CAS_ATTEMPTS` loops, advisory locks replacing `fileQueues`, pool storm testing.
+
+## 23. Preview environment isolation (spike 603)
+
+Flag: `phase-173` (`NEXT_PUBLIC_FEATURE_PHASE_173` / `FEATURE_PHASE_173`). Default off. See `docs/spikes/603-preview-isolation-findings.md`.
+
+- `lib/preview-isolation.ts`: `resolvePreviewId` (`pr-<n>` from `VERCEL_GIT_PULL_REQUEST_ID`, else `br-<slug>-<hash>`; always one safe path segment), `checkPreviewIsolation`, `isCronBlockedInPreview`, `previewTrustsVercelCronHeader`. The module has no `node:*` imports because `lib/env-validation.ts` reaches client bundles through `phase-protocol.ts`.
+- `lib/server-data-paths.ts`: in a preview the root becomes `<root>/previews/<id>`.
+- `lib/env-validation.ts`: `validatePhaseEnv` reports `isolation_violation` for a preview that resolves to the production issuer (public key or derived from `CLASSIC_LIQ_ISSUER_SECRET`), reuses the production cron secret, uses a production contract ID, or sets `STELLAR_NETWORK=mainnet`. Production identity is declared with `PHASE_PROD_ISSUER`, `PHASE_PROD_CRON_SECRET_SHA256`, `PHASE_PROD_CONTRACT_IDS`; messages never contain secret values.
+- `app/api/cron/faucet-health/route.ts`: preview runs return `{ skipped: "preview_cron_disabled" }` unless `PHASE_PREVIEW_CRON_ENABLED=1`; the unauthenticated-header shortcut is disabled in previews.
+- Caveat: Vercel `/tmp` is per-instance, so namespacing prevents cross-preview bleed, not loss between instances.
+- Counters: `preview_isolation_violation`, `preview_cron_blocked`.

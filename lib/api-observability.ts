@@ -2,6 +2,7 @@ import { redactSecrets } from "@/lib/x402-dead-letter"
 import { isFeatureEnabled } from "@/lib/feature-flags"
 import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
+import { emitLog } from "@/lib/log-pipeline"
 
 type ApiLogLevel = "info" | "warn" | "error"
 type ApiMetadata = Record<string, unknown>
@@ -31,15 +32,15 @@ export function createApiRequestContext(request: NextRequest, route: string) {
   const correlationId = getIncomingCorrelationId(request)
 
   function log(level: ApiLogLevel, event: string, metadata: ApiMetadata = {}) {
-    const payload = {
+    const payload = emitLog({
       timestamp: new Date().toISOString(),
       level,
       event,
       route,
       method: request.method,
       correlationId,
-      ...(isFeatureEnabled("phase-176") ? redactSecrets(metadata) as ApiMetadata : metadata),
-    }
+      ...metadata,
+    })
     const line = JSON.stringify(payload)
 
     if (level === "error") console.error(line)

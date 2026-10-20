@@ -63,10 +63,10 @@
  * - phase-167: WalletConnect v2 mobile session resilience with reconnect and chain-switch (spike 623 / issue #486)
  * - phase-168: xBull full support with sign, trustline and Freighter-difference matrix (spike 624 / issue #487)
  * - phase-169: Ledger blind-signing to clear-signing review for Soroban transactions (spike 625 / issue #488)
- * - phase-170: Albedo retirement-or-parity plan with flagged sunset (spike 626 / issue #489)
- * - phase-171: Freighter mobile browser support with in-app UA, injection and return flow (spike 627 / issue #490)
- * - phase-172: biometric unlock for returning wallets with OS-gated session (spike 628 / issue #491)
- * - phase-173: Horizon-backed per-wallet transaction history timeline (spike 629 / issue #492)
+ * - phase-170: structured log pipeline with redaction, sampling and a batched external sink (spike 606 / issue #470)
+ * - phase-171: backup and disaster-recovery snapshots for sidecars, SQLite and the secrets map (spike 605 / issue #469)
+ * - phase-172: SQLite to Postgres migration rehearsal with dual-write, parity and rollback (spike 604 / issue #468)
+ * - phase-173: Vercel preview-environment isolation for data roots, secrets, contracts and cron (spike 603 / issue #467)
  */
 
 export type PhaseFeatureFlag =
