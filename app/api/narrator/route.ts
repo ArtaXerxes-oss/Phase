@@ -14,6 +14,20 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
+const NARRATOR_TIMEOUT_MS = Number(process.env.NARRATOR_TIMEOUT_MS ?? 25_000)
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, rej) => {
+    timer = setTimeout(() => rej(new Error(`${label}_TIMEOUT: exceeded ${ms}ms`)), ms)
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 const SAFETY_SETTINGS = (
   [
     HarmCategory.HARM_CATEGORY_HATE_SPEECH,
@@ -149,7 +163,11 @@ export async function POST(request: NextRequest) {
         { apiVersion: "v1beta" },
       )
 
-      const result = await model.generateContent(systemPrompt)
+      const result = await withTimeout(
+        model.generateContent(systemPrompt),
+        NARRATOR_TIMEOUT_MS,
+        "NARRATOR"
+      )
       narrative = result.response.text().trim()
 
       if (!narrative) {
