@@ -1,3 +1,5 @@
+import { complianceGate } from "@/lib/compliance"
+import { isFeatureEnabled } from "@/lib/feature-flags"
 import { NextRequest, NextResponse } from "next/server"
 import { REQUIRED_AMOUNT } from "@/lib/phase-protocol"
 import { isSettlementUsed } from "@/lib/settlement-store"
@@ -32,15 +34,20 @@ function isMaisonedPayment(payload: LocalX402Token | null): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  if (isFeatureEnabled("phase-176") && process.env.PHASE_KYC_MODE === "live") {
+    return NextResponse.json({ code: "DEMO_SHIM_FORBIDDEN" }, { status: 503 })
+  }
   if (!localShimEnabled()) {
     return NextResponse.json({ error: "x402 local shim disabled" }, { status: 503 })
   }
   try {
-    const body = (await request.json()) as { payment_token?: string }
+    const body = (await request.json()) as { payment_token?: string; user_address?: string }
     const token = body.payment_token?.trim()
     if (!token) return NextResponse.json({ error: "Missing payment_token" }, { status: 400 })
 
     const payload = decodeX402Token(token)
+    const block = await complianceGate(body.user_address ?? "", String(payload?.amount ?? ""), "x402")
+    if (block) return block
     const verified = isMaisonedPayment(payload)
 
     if (verified && typeof payload?.invoice === 'string') {

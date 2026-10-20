@@ -47,6 +47,9 @@ const FILES = {
   qrAudit: "qr-audit.json",
   walletSessions: "wallet-sessions.json",
   ledgerAudit: "ledger-audit.json",
+  legalHolds: "legal-holds.json",
+  termsConsents: "terms-consents.json",
+  legalDocuments: "legal-documents.json",
 } as const
 
 
