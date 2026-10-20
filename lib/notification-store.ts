@@ -29,6 +29,8 @@ export type NotificationType =
   | "moderation_appeal_resolved"
   | "quest_arc_generated"
   | "quest_arc_completed"
+  // phase-143 winback reactivation hook
+  | "winback_reactivation"
 
 export type Notification = {
   id: string

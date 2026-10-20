@@ -1,10 +1,8 @@
+import { redactSecrets } from "@/lib/x402-dead-letter"
+import { isFeatureEnabled } from "@/lib/feature-flags"
 import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
-import {
-  isAnalyticsWarehouseEnabled,
-  recordWarehouseEvent,
-  sanitizeAnalyticsMetadata,
-} from "@/lib/analytics-warehouse"
+import { emitLog } from "@/lib/log-pipeline"
 
 type ApiLogLevel = "info" | "warn" | "error"
 type ApiMetadata = Record<string, unknown>
@@ -34,16 +32,15 @@ export function createApiRequestContext(request: NextRequest, route: string) {
   const correlationId = getIncomingCorrelationId(request)
 
   function log(level: ApiLogLevel, event: string, metadata: ApiMetadata = {}) {
-    const boundedMetadata = sanitizeAnalyticsMetadata(metadata)
-    const payload = {
+    const payload = emitLog({
       timestamp: new Date().toISOString(),
       level,
       event,
       route,
       method: request.method,
       correlationId,
-      ...boundedMetadata,
-    }
+      ...metadata,
+    })
     const line = JSON.stringify(payload)
 
     if (level === "error") console.error(line)

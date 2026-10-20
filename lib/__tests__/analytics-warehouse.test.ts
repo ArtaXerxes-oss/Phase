@@ -1,156 +1,210 @@
-/**
- * Spike 610 (#473, phase-176) — Unified analytics event warehouse across faucet,
- * claim, notifications, forge, and push funnels.
- *
- * NOTE: Written as part of the spike implementation (static review, not executed per strict constraints).
- */
-
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { describe, it, beforeEach, afterEach, vi } from "vitest"
+import * as assert from "node:assert/strict"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { parquetMetadata, parquetReadObjects } from "hyparquet"
 import {
-  recordWarehouseEvent,
-  getUnifiedFunnelAnalytics,
-  exportAnalyticsForWallet,
-  sanitizeAnalyticsMetadata,
-  computeDedupeKey,
-  auditAnalyticsWarehouseWiring,
-  AnalyticsWarehouseError,
+  WAREHOUSE_SCHEMA,
+  WAREHOUSE_SCHEMA_VERSION,
+  buildWarehouseManifest,
+  collectCounterRows,
+  collectVolumeRows,
+  collectWarehouseRows,
+  formatWarehouseNdjson,
+  isWarehouseExportEnabled,
+  redactWarehouseRow,
+  redactWarehouseRows,
+  redactWarehouseText,
+  rowsToParquetBuffer,
+  warehouseRowsChecksum,
+  type WarehouseRow,
 } from "@/lib/analytics-warehouse"
-import { isAnalyticsWarehouseEnabled, phase176RollbackNote } from "@/lib/feature-flags"
+import { getDb, resetDbForTests } from "@/lib/sqlite-db"
+import { fingerprintWallet } from "@/lib/redaction"
+import { resetSecurityCounters, incSecurityCounter } from "@/lib/security-counters"
 
-const TEST_WALLET_1 = "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVW5S"
-const TEST_WALLET_2 = "GB32D5S5H5H3QJ42K3Y4Y4Y4Y4Y4Y4Y4Y4Y4Y4Y4Y4Y4Y4Y4Y4Y4Y4Y4"
+const WALLET = `G${"A".repeat(55)}`
+const SECRET = "SDQXX5YXNQJ6X4Y3MXBXL4SVGSJPBIEUT3LOEBJTAI7XTMSEFAPKKMEJ"
+const NOW = Date.parse("2026-06-01T00:00:00.000Z")
 
-describe("Unified Analytics Event Warehouse (Spike 610 / phase-176)", () => {
-  const saved176 = process.env.FEATURE_PHASE_176
+function enable(on: boolean) {
+  if (on) {
+    process.env.NEXT_PUBLIC_FEATURE_PHASE_180 = "1"
+    process.env.FEATURE_PHASE_180 = "1"
+  } else {
+    delete process.env.NEXT_PUBLIC_FEATURE_PHASE_180
+    delete process.env.FEATURE_PHASE_180
+  }
+}
 
-  beforeEach(() => {
-    process.env.FEATURE_PHASE_176 = "1"
+function row(over: Partial<WarehouseRow> = {}): WarehouseRow {
+  return {
+    table: "counter",
+    ts: NOW,
+    metric: "wash_trades_flagged",
+    value: 3,
+    status: null,
+    wallet_fingerprint: null,
+    ...over,
+  }
+}
+
+let dir: string
+
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), "phase-warehouse-"))
+  vi.stubEnv("PHASE_SERVER_DATA_DIR", dir)
+  resetDbForTests()
+  resetSecurityCounters()
+  enable(true)
+})
+
+afterEach(() => {
+  enable(false)
+  resetDbForTests()
+  vi.unstubAllEnvs()
+  rmSync(dir, { recursive: true, force: true })
+})
+
+describe("phase-180 warehouse redaction", () => {
+  it("gates on the feature flag and ships a rollback note", () => {
+    assert.equal(isWarehouseExportEnabled(), true)
+    enable(false)
+    assert.equal(isWarehouseExportEnabled(), false)
   })
 
-  afterEach(() => {
-    if (saved176 === undefined) delete process.env.FEATURE_PHASE_176
-    else process.env.FEATURE_PHASE_176 = saved176
+  it("fingerprints wallets and strips secrets from text", () => {
+    const text = redactWarehouseText(`payout ${WALLET} signed with ${SECRET}`)
+    assert.ok(!text.includes(WALLET))
+    assert.ok(!text.includes(SECRET))
+    assert.ok(text.includes(fingerprintWallet(WALLET)))
+    assert.ok(text.includes("[REDACTED_SECRET_KEY]"))
   })
 
-  it("checks feature flag enabling and rollback notes", () => {
-    expect(isAnalyticsWarehouseEnabled()).toBe(true)
-    const note = phase176RollbackNote()
-    expect(note).toContain("phase-176")
+  it("fingerprints raw wallet fields and is idempotent across runs", () => {
+    const raw = row({ table: "health", metric: `health for ${WALLET}`, wallet_fingerprint: WALLET })
+    const once = redactWarehouseRow(raw)
+    const twice = redactWarehouseRow(once)
+    assert.equal(once.wallet_fingerprint, fingerprintWallet(WALLET))
+    assert.ok(!once.metric.includes(WALLET))
+    assert.equal(twice.wallet_fingerprint, once.wallet_fingerprint)
+    assert.equal(twice.metric, once.metric)
+
+    const rows = redactWarehouseRows([raw, row({ value: null })])
+    assert.equal(rows.length, 2)
+    assert.equal(rows[1].wallet_fingerprint, null)
+  })
+})
+
+describe("phase-180 warehouse formats", () => {
+  it("builds a schema-versioned manifest with a stable rows-only checksum", () => {
+    const rows = [row(), row({ table: "volume", metric: "market_volume_phaselq_24h", value: 100 })]
+    const manifest = buildWarehouseManifest(rows, { generatedAt: NOW })
+    assert.equal(manifest.schema, WAREHOUSE_SCHEMA)
+    assert.equal(manifest.version, WAREHOUSE_SCHEMA_VERSION)
+    assert.equal(manifest.row_count, 2)
+    assert.deepEqual(manifest.tables, ["counter", "volume"])
+    assert.equal(manifest.redacted, true)
+    assert.equal(manifest.checksum, warehouseRowsChecksum(rows))
+    assert.equal(manifest.checksum, buildWarehouseManifest(rows, { generatedAt: NOW + 1 }).checksum)
+    assert.notEqual(manifest.checksum, warehouseRowsChecksum([row()]))
   })
 
-  it("sanitizes and bounds metadata, redacting sensitive keys and limiting size", () => {
-    const raw = {
-      validMetric: 42,
-      normalString: "hello world",
-      admin_secret_key: "S1234567890",
-      userPassword: "supersecretpassword",
-      authorization: "Bearer secret-token-xyz",
-      longString: "a".repeat(500),
-      nestedObject: { safeField: "safe" },
-    }
-
-    const sanitized = sanitizeAnalyticsMetadata(raw)
-
-    expect(sanitized.validMetric).toBe(42)
-    expect(sanitized.normalString).toBe("hello world")
-    expect(sanitized.admin_secret_key).toBe("[REDACTED]")
-    expect(sanitized.userPassword).toBe("[REDACTED]")
-    expect(sanitized.authorization).toBe("[REDACTED]")
-    expect((sanitized.longString as string).length).toBe(256)
+  it("emits NDJSON with a manifest header line and one row per line", () => {
+    const rows = redactWarehouseRows([row(), row({ metric: "distributor_health", status: "healthy", wallet_fingerprint: WALLET })])
+    const { manifest, body } = formatWarehouseNdjson(rows, { generatedAt: NOW })
+    const lines = body.split("\n").filter((line) => line.length > 0)
+    assert.equal(lines.length, 3)
+    const header = JSON.parse(lines[0])
+    assert.equal(header.schema, WAREHOUSE_SCHEMA)
+    assert.equal(header.checksum, manifest.checksum)
+    assert.equal(header.row_count, 2)
+    const parsed = lines.slice(1).map((line) => JSON.parse(line))
+    assert.equal(parsed.length, 2)
+    assert.equal(parsed[0].table, "counter")
+    assert.ok(!lines.join("\n").includes(WALLET))
   })
 
-  it("computes deterministic deduplication keys for write idempotency", () => {
-    const ts = 1700000000000
-    const key1 = computeDedupeKey("faucet", "claim_started", TEST_WALLET_1, ts)
-    const key2 = computeDedupeKey("faucet", "claim_started", TEST_WALLET_1, ts)
-    const keyDifferentStage = computeDedupeKey("faucet", "claim_confirmed", TEST_WALLET_1, ts)
-
-    expect(key1).toBe(key2)
-    expect(key1).not.toBe(keyDifferentStage)
-    expect(key1.length).toBe(32)
+  it("emits empty-safe NDJSON for a zero-row export", () => {
+    const { manifest, body } = formatWarehouseNdjson([], { generatedAt: NOW })
+    assert.equal(manifest.row_count, 0)
+    assert.equal(body.trim().split("\n").length, 1)
   })
 
-  it("records an event and generates a unified funnel report", async () => {
-    const sessionId = "sess-" + Date.now()
-    const now = 1700000100000
+  it("round-trips rows through Parquet with schema metadata", async () => {
+    const rows = redactWarehouseRows([
+      row(),
+      row({ table: "health", metric: "distributor_health", value: null, status: "healthy", wallet_fingerprint: WALLET, ts: NOW + 5 }),
+      row({ table: "volume", metric: "market_offers_accepted_24h", value: 12, ts: NOW + 9 }),
+    ])
+    const { manifest, buffer } = rowsToParquetBuffer(rows, { generatedAt: NOW })
 
-    // Step 1: Anonymous viewed
-    const e1 = await recordWarehouseEvent({
-      surface: "faucet",
-      stage: "viewed",
-      session_id: sessionId,
-      ts: now,
-      force: true,
-    })
-    expect(e1.surface).toBe("faucet")
-    expect(e1.stage).toBe("viewed")
+    const bytes = new Uint8Array(buffer)
+    assert.equal(String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]), "PAR1")
+    assert.equal(
+      String.fromCharCode(
+        bytes[bytes.length - 4],
+        bytes[bytes.length - 3],
+        bytes[bytes.length - 2],
+        bytes[bytes.length - 1],
+      ),
+      "PAR1",
+    )
 
-    // Step 2: Wallet connected (triggers session stitching)
-    const e2 = await recordWarehouseEvent({
-      surface: "faucet",
-      stage: "wallet_connected",
-      wallet: TEST_WALLET_1,
-      session_id: sessionId,
-      ts: now + 5000,
-      force: true,
-    })
-    expect(e2.wallet).toBe(TEST_WALLET_1)
+    const meta = parquetMetadata(buffer)
+    const kv = Object.fromEntries((meta.key_value_metadata ?? []).map((entry) => [entry.key, entry.value]))
+    assert.equal(kv["phase.schema"], WAREHOUSE_SCHEMA)
+    assert.equal(kv["phase.schema_version"], WAREHOUSE_SCHEMA_VERSION)
+    assert.equal(kv["phase.checksum"], manifest.checksum)
+    assert.equal(kv["phase.redacted"], "true")
 
-    // Step 3: Claim started
-    await recordWarehouseEvent({
-      surface: "faucet",
-      stage: "claim_started",
-      wallet: TEST_WALLET_1,
-      session_id: sessionId,
-      ts: now + 10000,
-      force: true,
-    })
+    const parsed = await parquetReadObjects({ file: buffer })
+    assert.equal(parsed.length, 3)
+    assert.equal(parsed[0].table, "counter")
+    assert.equal(Number(parsed[1].ts), NOW + 5)
+    assert.equal(parsed[1].value, null)
+    assert.equal(parsed[1].status, "healthy")
+    assert.equal(parsed[2].metric, "market_offers_accepted_24h")
+    assert.equal(parsed[2].value, 12)
+    const serialized = JSON.stringify(parsed, (key, value) =>
+      typeof value === "bigint" ? String(value) : value,
+    )
+    assert.ok(!serialized.includes(WALLET))
+  })
+})
 
-    // Step 4: Claim confirmed
-    await recordWarehouseEvent({
-      surface: "faucet",
-      stage: "claim_confirmed",
-      wallet: TEST_WALLET_1,
-      session_id: sessionId,
-      ts: now + 25000,
-      force: true,
-    })
-
-    // Funnel computation
-    const report = await getUnifiedFunnelAnalytics({
-      surface: "faucet",
-      now: now + 30000,
-    })
-
-    expect(report.surface).toBe("faucet")
-    expect(report.stages.length).toBeGreaterThan(0)
-    expect(report.stages[0].stage).toBe("viewed")
+describe("phase-180 warehouse collectors", () => {
+  it("collects counter rows from the security counter snapshot", () => {
+    incSecurityCounter("wash_trades_flagged", 4)
+    const rows = collectCounterRows(NOW)
+    const flagged = rows.find((r) => r.metric === "wash_trades_flagged")
+    assert.ok(flagged)
+    assert.equal(flagged.table, "counter")
+    assert.equal(flagged.value, 4)
+    assert.equal(flagged.ts, NOW)
+    assert.equal(flagged.wallet_fingerprint, null)
   })
 
-  it("exports all events associated with a wallet for GDPR Article 20 data portability", async () => {
-    const exportResult = await exportAnalyticsForWallet(TEST_WALLET_1)
-    expect(exportResult.wallet).toBe(TEST_WALLET_1)
-    expect(Array.isArray(exportResult.events)).toBe(true)
-    expect(typeof exportResult.exportedAt).toBe("number")
+  it("collects zero volume from an empty database and skips a broken one", async () => {
+    const rows = await collectVolumeRows({ now: NOW })
+    assert.equal(rows.length, 2)
+    assert.equal(rows.find((r) => r.metric === "market_volume_phaselq_24h")?.value, 0)
+    assert.equal(rows.find((r) => r.metric === "market_offers_accepted_24h")?.value, 0)
+
+    const db = getDb()
+    db.exec("DROP TABLE offers")
+    const afterDrop = await collectVolumeRows({ now: NOW })
+    assert.deepEqual(afterDrop, [])
   })
 
-  it("throws when flag is disabled without force flag", async () => {
-    process.env.FEATURE_PHASE_176 = "0"
-    delete process.env.NEXT_PUBLIC_FEATURE_PHASE_176
-
-    await expect(
-      recordWarehouseEvent({
-        surface: "faucet",
-        stage: "viewed",
-        force: false,
-      }),
-    ).rejects.toThrow(AnalyticsWarehouseError)
-  })
-
-  it("audits the warehouse wiring successfully when flag is active", () => {
-    process.env.FEATURE_PHASE_176 = "1"
-    const audit = auditAnalyticsWarehouseWiring()
-    expect(audit.ok).toBe(true)
-    expect(audit.note).toContain("[phase-176]")
+  it("collects counter, health and volume tables in one pass", async () => {
+    incSecurityCounter("preview_verify_total")
+    const rows = await collectWarehouseRows({ now: NOW })
+    const tables = [...new Set(rows.map((r) => r.table))].sort()
+    assert.deepEqual(tables, ["counter", "volume"])
+    assert.ok(rows.some((r) => r.table === "counter" && r.metric === "preview_verify_total"))
+    const redacted = redactWarehouseRows(rows)
+    assert.equal(redacted.length, rows.length)
   })
 })

@@ -280,7 +280,7 @@ hook in `app/signals/[id]/use-signal-crdt.ts` posts on a short debounce and
 polls while the panel is open.
 
 **Metrics.** `lib/signal-version-metrics.ts` keeps process-local counters for
-`signal_version_conflicts` (split by `edit` / `put` / `upvote` / `reply`, and
+`signal_version_conflicts` (split by `edit` / `put` / `upvote` / `reply` / `vote`, and
 flagged separately when a CAS retry was attempted) plus `signal_crdt_merges`,
 `signal_crdt_concurrent_merges` and commit outcomes. The store is the only place
 that increments them, so a rejected CAS is counted once no matter how many layers
@@ -419,6 +419,11 @@ NEXT_PUBLIC_FEATURE_PHASE_158=1
 NEXT_PUBLIC_FEATURE_PHASE_159=1
 NEXT_PUBLIC_FEATURE_PHASE_160=1
 NEXT_PUBLIC_FEATURE_PHASE_161=1
+# Spikes 603/604/605/606 (issues #467/#468/#469/#470)
+NEXT_PUBLIC_FEATURE_PHASE_170=1
+NEXT_PUBLIC_FEATURE_PHASE_171=1
+NEXT_PUBLIC_FEATURE_PHASE_172=1
+NEXT_PUBLIC_FEATURE_PHASE_173=1
 # Server-only aliases also accepted: FEATURE_PHASE_104, etc.
 ```
 
@@ -479,7 +484,7 @@ Contract commands are documented in [`contracts/README.md`](../contracts/README.
 `.github/workflows/ci.yml` runs on every PR and push to `main`:
 
 - `contracts` — compiles and tests both Soroban crates (`mock-token`, `phase-protocol`) against `wasm32-unknown-unknown`.
-- `web` — `npm run lint`, `npm run typecheck` (both currently non-blocking pending a cleanup of pre-existing errors — see the job for the tracked count), and `npm run build`.
+- `web` — `npm run lint` (non-blocking: 286 pre-existing errors), `npm run typecheck` and `npm test` (both blocking), and `npm run build`.
 - `deploy-staging` — on push to `main` only, behind a `staging` GitHub environment: builds + optimizes `phase-protocol` and runs `scripts/deploy-phase-sep50.ts` against testnet using repo secrets/vars.
 
 ---
@@ -695,46 +700,90 @@ Flag: `phase-169` (`NEXT_PUBLIC_FEATURE_PHASE_169` / `FEATURE_PHASE_169`). Defau
 - Audit counters: `ledger_clear_signing_reviewed`, `ledger_clear_signing_approved`, `ledger_clear_signing_rejected`, `ledger_blind_signing_blocked`, `ledger_gate13_preempted` in `lib/security-counters.ts`.
 - Routes: `POST /api/wallet/ledger` for clear-signing lifecycle telemetry.
 
-## 20. Feature-flag ops: staged rollout, per-wallet targeting and kill-switch drills (spike 607)
+## 20. Log pipeline: redaction, sampling and external sink (spike 606)
 
-Flag: `phase-174` (`NEXT_PUBLIC_FEATURE_PHASE_174` / `FEATURE_PHASE_174`). Default off. Rollback: unset var, restart (`feature-flag-ops.json` remains inert on disk).
+Flag: `phase-170` (`NEXT_PUBLIC_FEATURE_PHASE_170` / `FEATURE_PHASE_170`). Default off. See `PROJECT_ARCHITECTURE.md` §10 and `docs/spikes/606-log-pipeline-findings.md`.
 
-- `lib/feature-flags.ts`: Deduplicates `PhaseFeatureFlag` (`phase-128`), restores `phase-134` / `phase-135` / `phase-50..53` / `phase-95` / `phase-156` / `phase-170..174` to `ALL_FEATURE_FLAGS`, splits build-time `NEXT_PUBLIC_FEATURE_*` (`clientBundled`) from server runtime `FEATURE_*` (`serverConfigured`), and evaluates runtime rules (`killSwitch`, `denyWallets`, `allowWallets`, `overrideEnabled`, `rolloutBps` 0..10,000 via deterministic 32-bit FNV-1a `flagRolloutBucket`).
-- Stale-on-error rule cache: `refreshFeatureFlagOpsCache()` hydrates the in-memory rule map from `feature-flag-ops.json`; on I/O failure it retains last-known-good rules (`cacheState: "stale"`) and increments `flag_ops_stale_fallback`.
-- Mid-poll idempotency & kill-switch enforcement: `app/api/faucet/route.ts` pins `amountStroops` inside `faucetPending` at payout submission so a mid-poll `phase-131` streak-multiplier ramp or kill-switch never mutates or double-submits an in-flight claim. `lib/distributor-refill.ts` and `app/api/cron/faucet-health/route.ts` check `evaluateFeatureFlag("phase-133", { runtimeOnly: true })` before reserving funds or calling Soroban RPC.
-- Admin route & drill runner: `GET/POST /api/admin/feature-flags` (guarded by `PHASE_ADMIN_KEY` / `ADMIN_API_TOKEN` with `timingSafeEqual`) supports CAS-versioned rule updates (`expectedVersion` / `If-Match` → `409 VERSION_CONFLICT`), emergency kill-switches, and `runKillSwitchDrill()`.
+- `lib/log-pipeline.ts`: `redactLogValue` (masks `S...` seeds and secret-named keys such as `rawPayload`, `errorResult`, `authorization`; cycle/depth safe), `shouldSampleLog` (warn/error always kept, info sampled by FNV hash of the correlation id so a request is kept or dropped whole), `toPipelineRecord` (only `level`, `event`, `route`, `method`, `status_class` are labels; wallets, CIDs, token ids, hashes stay unindexed in `fields`), and `LogPipeline` (bounded buffer, drop-oldest, single-flight flush, abort timeout, at-most-once delivery).
+- `lib/api-observability.ts`: every `log()` goes through `emitLog`, so the console line is redacted too when the flag is on.
+- Env: `LOG_SINK_URL` (https only, validated in `serverEnvSchema`), `LOG_SINK_TOKEN`, `LOG_SAMPLE_RATE_INFO` (0..1, default 0.1), `LOG_SINK_BATCH_SIZE`, `LOG_SINK_MAX_BUFFER`, `LOG_SINK_FLUSH_MS`, `LOG_SINK_TIMEOUT_MS`.
+- Counters (`lib/security-counters.ts`): `log_pipeline_enqueued`, `_sampled_out`, `_dropped`, `_redacted`, `_flush_ok`, `_flush_failed`.
+- Not covered: `waitUntil`-style flush on serverless freeze, counter export, migrating ad-hoc `console.*` callers.
 
-## 21. Dependency-update cadence automation with grouped Soroban and Stellar updates (spike 608)
+## 21. Backup and disaster recovery (spike 605)
 
-Flag: `phase-175` (`NEXT_PUBLIC_FEATURE_PHASE_175` / `FEATURE_PHASE_175`). Default off. Rollback: unset var, restart.
+Flag: `phase-171` (`NEXT_PUBLIC_FEATURE_PHASE_171` / `FEATURE_PHASE_171`). Default off. See `docs/spikes/605-backup-dr-findings.md`.
 
-- Unified Stellar SDK & lockfiles: `scripts/package.json` and `scripts/package-lock.json` upgraded from `@stellar/stellar-sdk` `^12.0.0` (`12.3.0`) to `^15.0.1` (`15.0.1`) to match root `package.json`, eliminating major SDK skew between CLI scripts (`deploy-phase-sep50.ts`, `interact.ts`, `setup-phase-v2.ts`) and Next.js routes (`app/api/faucet/route.ts`, `lib/phase-protocol.ts`).
-- Canonical WASM target & Soroban ABI pin: `scripts/package.json` `build:phase` and `optimize:phase` now target `wasm32-unknown-unknown` (matching `.github/workflows/ci.yml` and `scripts/deploy-phase-sep50.ts`, removing `wasm32v1-none` skew). Both `contracts/phase-protocol` and `contracts/mock-token` declare `[package.metadata.phase_cadence]` (`soroban_sdk_major = 22`, `soroban_abi_version = 22000`, `stellar_cli_version = "23.0.0"`) and expose `pub fn soroban_abi_version(_env: Env) -> u32 { 22_000 }`.
-- Grouped cadence & CI gate: `.github/dependabot.yml` groups `@stellar/*` + `@creit.tech/stellar-wallets-kit` + `x402-stellar`, `next` + `react` + `react-dom`, `vitest` + `@vitest/coverage-v8`, and `soroban-*` Cargo updates on a weekly schedule. `npm run deps:cadence` (`scripts/check-dependency-cadence.ts` / `lib/dependency-cadence.ts`) runs in `.github/workflows/ci.yml`, `dependency-audit.yml`, and `secret-rotation.yml`.
+- `lib/backup-snapshot.ts`: `createSnapshot` locks every sidecar path (sorted, via `withFileLock`) and takes the SQLite image with `VACUUM INTO`, so the set and the database share one logical instant and no WAL copy is involved; a corrupt sidecar fails the snapshot. `verifySnapshot` re-hashes, parses JSON, runs `integrity_check` and `foreign_key_check`, and compares per-table row counts. `restoreSnapshot` verifies first, removes stale `-wal`/`-shm`, writes tmp+rename, and holds `.restore-in-progress` (stale after 10 min).
+- `app/api/cron/faucet-health/route.ts`: returns `503` + `Retry-After: 60` while the marker is fresh, so a refill cannot run against half-restored distributor state.
+- Secrets: never written to a snapshot. `sealSecrets`/`openSecrets` use AES-256-GCM with a scrypt key (passphrase ≥ 16 chars); failures never echo plaintext; `diffSecretsMap` reports drift by name only.
+- `lib/server-data-paths.ts`: `serverDataRoot`, `serverDataFileKeys`, `serverDataFileName` exported so backups cannot drift from the file table.
+- Drill: `npm run backup:drill` (snapshot → verify → restore to scratch → SQLite parity).
+- Restore replaces the database file: close the connection (`resetDbForTests`) and run offline for the live root.
+- Counters: `backup_snapshot_created|verified|corrupt`, `backup_restore_completed|blocked`.
 
-## 22. Unified analytics event warehouse across faucet, claim, notifications, forge, and push funnels (spike 610)
+## 22. SQLite to Postgres migration rehearsal (spike 604)
 
-Flag: `phase-176` (`NEXT_PUBLIC_FEATURE_PHASE_176` / `FEATURE_PHASE_176`). Default off. Rollback: unset var, restart (`analytics_events` rows remain inert on disk).
+Flag: `phase-172` (`NEXT_PUBLIC_FEATURE_PHASE_172` / `FEATURE_PHASE_172`). Default off. See `docs/spikes/604-postgres-rehearsal-findings.md`.
 
-- SQLite WAL persistence: `analytics_events` table in `lib/sqlite-db.ts` with indexed `surface`, `stage`, `wallet`, `session_id`, `correlation_id`, `ts`, and `dedupe_key` (SHA256 of surface, stage, subject, minute bucket) ensuring strict write idempotency across serverless invocations.
-- Session stitching: `analytics_session_stitching` table automatically joins anonymous pre-connect visitor events (`session_id`) with authenticated wallet addresses upon wallet connection (`session_id -> wallet`), retroactively updating past session events so funnels reflect true conversion.
-- Cross-surface lifecycle event sourcing: emits structured, bounded events from faucet claim cycles (`pending`, `polling`, `202`, `409`, `502`, `confirmed`, `failed`), in-app notifications (`created`, `read`, `all_read`), push dispatches (`dispatched`, `failed`), observability HTTP routes, forge jobs, and quest/achievement milestones.
-- Bounded closed-label metadata: `sanitizeAnalyticsMetadata` caps keys at 25, truncates string lengths to 256, and strips authentication tokens, cookies, secrets, and private keys.
-- Unified funnel queries & Article 20 portability: `getUnifiedFunnelAnalytics` computes stage-by-stage counts, drop-offs, conversion rates, and average time-to-convert (ms); `exportAnalyticsForWallet` produces GDPR Article 20 data portability exports; backward-compatible migration automatically drains legacy `faucet-funnel-events.json` 5k-ring into SQLite on first initialization.
+- `lib/db-parity.ts`: `toPositionalParams`, `sqliteTypeToPostgres` (integer flags stay `BIGINT` so parity compares like with like), `buildPostgresCreateTable`, `buildPostgresUpsert` (explicit conflict target replaces `INSERT OR REPLACE`), `perTestSchemaName`, `compareSources`/`compareTable` (value diffs, `type_coercion`, order-independent checksum), `DualWriter`.
+- Dual-write ordering: primary (SQLite) first and authoritative; secondary is bounded (`maxSecondaryInflight`, default 5) and timed out (1.5 s). Failures, timeouts and shed writes land in `driftLog()` and never throw. `setMode("primary-only")` is the rollback.
+- `PHASE_DATABASE_URL` + flag → `dual`; otherwise `primary-only`.
+- Check two databases with `npm run db:parity -- <left> <right>`.
+- Counters: `db_parity_checked`, `db_parity_mismatch`, `db_dual_write_ok|drift|shed`.
+- Not covered: a `pg` driver, async re-plumbing of the `MAX_CAS_ATTEMPTS` loops, advisory locks replacing `fileQueues`, pool storm testing.
 
-## 23. Funnel analytics v2 with retention cohorts: day-N, wallet-age bands and quest cohorts (spike 611)
+## 23. Preview environment isolation (spike 603)
 
-Flag: `phase-177` (`NEXT_PUBLIC_FEATURE_PHASE_177` / `FEATURE_PHASE_177`). Default off. Rollback: unset var, restart.
+Flag: `phase-173` (`NEXT_PUBLIC_FEATURE_PHASE_173` / `FEATURE_PHASE_173`). Default off. See `docs/spikes/603-preview-isolation-findings.md`.
 
-- Day-N retention cohorts: `computeFunnelRetention` (`lib/funnel-retention.ts`) tracks Day-1, Day-3, Day-7, Day-14, and Day-30 retention joins against user genesis and claim milestones from `faucet-claims.json` and SQLite analytics events.
-- Time-to-convert metrics: computes mean, median (p50), and 90th percentile (p90) elapsed time across key funnel transitions (`viewed -> connected -> started -> confirmed`).
-- Wallet-age bands & bulkhead cache: classifies wallets into `<24h`, `1-7d`, `7-30d`, and `>30d` using `getWalletAgeBandCached` (`lib/horizon-bulkhead.ts`), routing on-chain age queries through process-local bulkhead limits and caching results to prevent Horizon 429 rate limits.
-- Sybil-weighted retention: joins wallet activity with `classifyWalletForCohorts` (`lib/sybil-resistance.ts`) to isolate true organic user retention from suspect bot farms across `trusted`, `caution`, and `suspect` cohorts.
-- Race-safe referral attribution: migrates `lib/referral-quest.ts` from unguarded file reads/writes to `updateStore` (`lib/json-store.ts`) under process locks, preventing concurrent claim collisions.
+- `lib/preview-isolation.ts`: `resolvePreviewId` (`pr-<n>` from `VERCEL_GIT_PULL_REQUEST_ID`, else `br-<slug>-<hash>`; always one safe path segment), `checkPreviewIsolation`, `isCronBlockedInPreview`, `previewTrustsVercelCronHeader`. The module has no `node:*` imports because `lib/env-validation.ts` reaches client bundles through `phase-protocol.ts`.
+- `lib/server-data-paths.ts`: in a preview the root becomes `<root>/previews/<id>`.
+- `lib/env-validation.ts`: `validatePhaseEnv` reports `isolation_violation` for a preview that resolves to the production issuer (public key or derived from `CLASSIC_LIQ_ISSUER_SECRET`), reuses the production cron secret, uses a production contract ID, or sets `STELLAR_NETWORK=mainnet`. Production identity is declared with `PHASE_PROD_ISSUER`, `PHASE_PROD_CRON_SECRET_SHA256`, `PHASE_PROD_CONTRACT_IDS`; messages never contain secret values.
+- `app/api/cron/faucet-health/route.ts`: preview runs return `{ skipped: "preview_cron_disabled" }` unless `PHASE_PREVIEW_CRON_ENABLED=1`; the unauthenticated-header shortcut is disabled in previews.
+- Caveat: Vercel `/tmp` is per-instance, so namespacing prevents cross-preview bleed, not loss between instances.
+- Counters: `preview_isolation_violation`, `preview_cron_blocked`.
 
+## 24. Leaderboard integrity: anti-farm scoring, decay and sybil discount (spike 616)
 
+Flag: `phase-178` (`NEXT_PUBLIC_FEATURE_PHASE_178` / `FEATURE_PHASE_178`). Default off. See `PROJECT_ARCHITECTURE.md` §10 and `docs/spikes/616-leaderboard-integrity-findings.md`.
 
+- `lib/leaderboard-integrity.ts`: `scoreLeaderboardCandidate` computes `finalScore = decayedPoints × farmPenalty × sybilDiscount` from an explicit `now`. Decay is `0.5 ** (age / 7d)` (same shape as the pricing oracle's wash discount). `detectFarmPatterns` multiplies down per rule — `event_burst` (×0.5, >12 events in 1h), `counterparty_concentration` (×0.6, one counterparty >80% of ≥6 counterpartied events), `point_velocity` (×0.7, >1000 points/day) — floored at `farmPenaltyFloor` 0.15. `sybilDiscountFor`: trusted 1, caution 0.7, suspect 0.35, missing band = caution.
+- Routes: `GET /api/leaderboard?limit=` ranks stored entries (ties break by wallet asc); `POST /api/leaderboard` requires `x-admin-key` and scores before persisting, so malformed events never reach `leaderboard-entries.json`.
+- Counters: `leaderboard_entries_ingested`, `leaderboard_scored`, `leaderboard_farm_penalized`, `leaderboard_sybil_discounted`.
+- Not covered: fetching sybil bands from Horizon inside the route (callers supply the band from phase-145 helpers).
 
+## 25. Retention TTL sweeps and GDPR erasure (spike 617)
 
+Flag: `phase-179` (`NEXT_PUBLIC_FEATURE_PHASE_179` / `FEATURE_PHASE_179`). Default off. See `docs/spikes/617-retention-gdpr-erasure-findings.md`.
 
+- `lib/retention-erasure.ts` sweeps: `sweepByTimestamp` (pure; records with a missing/non-finite timestamp are KEPT), `sweepAuthSessions` (expired SEP-10 sessions — `expires_at` normalized from seconds to ms — and consumed challenges past 24h), `sweepNotificationStore` (90-day notifications, empty wallet buckets dropped). `runRetentionSweeps()` applies both through `updateStore` and counts `retention_sweep_runs` / `retention_records_expired`.
+- `executeWalletErasure(wallet)`: validates the `G...` address, runs `assertNoLegalHold("wallet", …, "erasure")` (a hit → `RetentionErasureError LEGAL_HOLD_ACTIVE`, HTTP 423 in the route, `gdpr_erasure_blocked` counted, nothing deleted), then erases five registered domains (`ERASURE_TARGETS`: notifications, age declarations, follows, push subscriptions, auth sessions) and appends a receipt to `gdpr-erasure-log.json` — fingerprint only, capped at 1000 receipts, schema `phase-gdpr-article-17-erasure` 1.0.0.
+- Deliberate exclusion: `terms-consents.json` is never erased (Art. 17(3)(b) proof of legal basis). SQLite tables are a documented partial slice.
+- `POST /api/user/erasure`: fail-closed auth — admin key (`checkAdminKey`) or a matching `x-wallet-address`/`acting_wallet` header; missing header 401, mismatch 403, hold 423.
+- `GET /api/cron/retention-sweep`: daily 03:15 UTC, `validateCronAuth` + `isCronBlockedInPreview` + `isRestoreInProgress` (503 + `Retry-After`).
 
+## 26. Analytics warehouse export: Parquet and NDJSON (spike 618)
+
+Flag: `phase-180` (`NEXT_PUBLIC_FEATURE_PHASE_180` / `FEATURE_PHASE_180`). Default off. See `docs/spikes/618-analytics-warehouse-export-findings.md`.
+
+- `lib/analytics-warehouse.ts`: flat `WarehouseRow` (`table`, `ts`, `metric`, `value`, `status`, `wallet_fingerprint`) collected from the security-counter snapshot, distributor health history, and wash-excluded accepted-offer volume (`wash_flagged = 0`, matching `lib/wash-screening.ts` aggregates).
+- Redaction is unconditional: `redactWarehouseRow` fingerprints raw `G...` fields and rewrites wallet/secret-looking text in `metric`/`status`; it is idempotent (uses a fresh non-global regex because `WALLET_KEY_RE` is `/g` and `.test()` on it is stateful).
+- Manifest (`buildWarehouseManifest`): `phase-warehouse-export` 1.0.0, `generated_at`, `row_count`, sorted `tables`, `redacted: true`, `checksum` = sha256 over the rows-only NDJSON body (reproducible across formats; mirrored in `X-Warehouse-Checksum`).
+- Formats: NDJSON emits the manifest as line 1 then one row per line (`application/x-ndjson`); Parquet uses `hyparquet-writer`'s `parquetWriteBuffer` with typed columns and the manifest in `key_value_metadata` (`phase.schema_version`, `phase.checksum`, `phase.redacted`).
+- `GET /api/analytics/export?format=ndjson|parquet`: `checkAdminKey` fail-closed (401 unconfigured/denied), 400 on unknown format, `Content-Disposition` attachment, headers `X-Warehouse-Schema-Version` + `X-Warehouse-Checksum`.
+- Counters: `warehouse_export_runs`, `warehouse_records_redacted`, `warehouse_export_failed`.
+
+## 27. Anomaly detection with alert routing (spike 619)
+
+Flag: `phase-181` (`NEXT_PUBLIC_FEATURE_PHASE_181` / `FEATURE_PHASE_181`). Default off. See `docs/spikes/619-anomaly-detection-findings.md`.
+
+- `lib/anomaly-detection.ts` detectors over one `AnomalySample`:
+  - volume — `robustStats` (median + MAD×1.4826 → stddev fallback → σ floor 1e-9 so a flat baseline with a non-zero value still breaches), `z ≥ 3.5` warning / `≥ 6` critical, `minSamples` 8.
+  - counters — `counterDeltas` per run (resets and first-seen keys skipped), z-scored like volume; `collectAnomalySample` excludes `anomaly_*` counters so the detector cannot alert on itself.
+  - balances — `detectBalanceDrops`: ≥15% warning, ≥35% critical vs the previous run; no baseline needed.
+- Baseline hygiene: `detectAnomalies` measures BEFORE pushing, so a sample never pollutes its own reference; history rings cap at `maxHistory` 100 in `anomaly-baselines.json` (schema `phase-anomaly-baselines` 1.0.0).
+- `routeAnomalyAlerts` fans findings out through `sendWebhookAlert` with titles `Anomaly <kind>: <metric>` — distinct per kind+metric so the 15-minute `type:title` dedup cannot mask a second metric; attempts count `anomaly_alerts_routed`.
+- `GET /api/cron/anomaly-detect`: hourly at minute 5, `validateCronAuth` + preview fence + restore marker, then `collectAnomalySample` (volume SQL, counter snapshot, latest distributor health balances) → `detectAnomalies` → persist → route alerts → respond with findings.
+- Counters: `anomaly_checks_run`, `anomaly_volume_breaches`, `anomaly_counter_breaches`, `anomaly_balance_breaches`, `anomaly_alerts_routed`.
+- Not covered: per-channel alert thresholds, alert suppression windows beyond the webhook dedup, and a volume baseline warmer than one value per run.

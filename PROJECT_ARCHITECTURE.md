@@ -171,6 +171,7 @@ is a fixed-size digest of the canonical payload, keeping it under wallet
 | `phase-110` | `NEXT_PUBLIC_FEATURE_PHASE_110` / `FEATURE_PHASE_110` | Full-text narrative search across world collections: filter by entity ID, location, or free text via `GET /api/world/search` | off | Unset var, restart — search route returns 404 |
 | `phase-112` | `NEXT_PUBLIC_FEATURE_PHASE_112` / `FEATURE_PHASE_112` | World export to portable formats (`json`, `markdown`) via `GET /api/world/[collection_id]/export?format=` with `Content-Disposition` download headers | off | Unset var, restart — export route returns 404 |
 | `phase-115` | `NEXT_PUBLIC_FEATURE_PHASE_115` / `FEATURE_PHASE_115` | Cross-artifact lore linking: `GET/POST /api/world/narrative/[token_id]/links` stores directed `from → to` links with an optional note and exposes `outgoing`/`incoming` back-references | off | Unset var, restart — links route returns 404; existing link data on disk is unaffected |
+| `phase-80` | `NEXT_PUBLIC_FEATURE_PHASE_80` / `FEATURE_PHASE_80` | Fractional NFT ownership for high-value artifacts: co-ownership listings with 2–10,000 shares, share price in stroops, 100-holder cap, Zod+BigInt validation, ownership percentages and statistics. Pure math lib only (no persistence/API/on-chain escrow in this phase) | off | Unset var, restart — fractional ownership validation disabled; no data migration (pure validation library) |
 | `phase-88` | `NEXT_PUBLIC_FEATURE_PHASE_88` / `FEATURE_PHASE_88` | Follow suggestions ranked from mutual follows and bounded Stellar trustline co-membership | off | Unset var, restart — suggestions endpoint returns 404 and profile suggestion UI stays hidden |
 | `phase-89` | `NEXT_PUBLIC_FEATURE_PHASE_89` / `FEATURE_PHASE_89` | Scheduled creator broadcasts with list/cancel queue API | off | Unset var, restart — scheduling input stays hidden; scheduled records remain intact |
 | `phase-90` | `NEXT_PUBLIC_FEATURE_PHASE_90` / `FEATURE_PHASE_90` | Poll signal subtype with 2–6 options and one active vote per wallet | off | Unset var, restart — poll composer stays hidden and vote endpoint returns 404; poll data remains intact |
@@ -269,3 +270,13 @@ Collection metadata for explorer verification badges:
   - relevant API docs
 - Contract/address changes require synchronized env and docs updates.
 - Flag-gated features must document rollback in this table and in `docs/TECHNICAL.md` § Feature Flags.
+
+## 13) Mobile inbound links, compliance, and reporting (spikes 620/621/630/631)
+
+Mobile UI follows `visualViewport` with a `100dvh` fallback. The Chamber controls use a modal sheet on phones; desktop retains the grid. Inbound links pass a strict, same-origin intent schema and a review screen before navigation. Session intent has a 15-minute lifetime. A suggested recipient is untrusted context, never authority to sign or transfer. `/link/collection/N` rewrites to Chamber with its collection parameter preserved for metadata generation. Custom URI input is supported at `/link`; native scheme registration belongs to the native host.
+
+Compliance is a server pre-credit gate, independent of denial lists, Turnstile, sybil scoring and 2FA. Live sanctions results must be fresh; provider outage returns 503 with Retry-After. Identity callbacks use signed exact bytes, time bounds, SQLite event uniqueness and version checks; only keyed hashes of wallets/provider subjects are persisted. No identity documents are accepted. Mock mode is testnet-only. This is an integration adapter, not a declaration of regulatory compliance.
+
+Tax evidence is additive and append-only in SQLite. Amounts are integer stroops stored as text. Offer decisions and their unverified reporting evidence commit in one immediate transaction; acceptance alone is never labeled as an on-chain payment. CSV uses signed, expiring, one-use export authorization, a sequence snapshot and 50-row pages. Missing cost basis and FX are explicit, not inferred as zero. This testnet export is not a filed tax form. No contracts, addresses or WASM are changed.
+
+See [implementation and acceptance evidence](docs/spikes/620-621-630-631-integration.md) for file decisions, remaining deployment prerequisites and validation limits.

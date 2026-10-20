@@ -152,7 +152,7 @@ describe("mergeTimelineStreams — effects-first merge (Spike 629 requirement)",
   it("keeps failed transactions (they produce no effects)", () => {
     const failed = event({
       id: "tx:2",
-      kind: "tx_failed",
+      kind: "tx",
       type: "tx_failed",
       tx_hash: "orphan-hash",
       failed: true,
