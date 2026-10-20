@@ -1,6 +1,9 @@
+import { isFeatureEnabled } from "@/lib/feature-flags"
+import { verifySignalSignature } from "@/lib/viewer-signature"
 import { NextRequest, NextResponse } from "next/server"
 import { StrKey } from "@stellar/stellar-sdk"
 import {
+  decideOfferAtomic,
   getListing,
   getOffers,
   updateOfferStatus,
@@ -8,9 +11,6 @@ import {
   isPhase140Enabled,
   computeRoyaltySplit,
   recordRoyaltyPayout,
-  isPhaseCollabSplitsEnabled,
-  computeCollabSplits,
-  recordCollabSplits,
 } from "@/lib/market-store"
 import { createNotification } from "@/lib/notification-store"
 import { isPricingOracleEnabled, markSuggestionSold } from "@/lib/pricing-oracle"
@@ -18,7 +18,7 @@ import { isPricingOracleEnabled, markSuggestionSold } from "@/lib/pricing-oracle
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-type ActionBody = { action?: unknown; wallet?: unknown }
+type ActionBody = { action?: unknown; wallet?: unknown; timestamp?: unknown; signature?: unknown }
 
 export async function POST(
   request: NextRequest,
@@ -39,6 +39,14 @@ export async function POST(
     return NextResponse.json({ error: "action must be accept or reject" }, { status: 400 })
   }
 
+  const atomic = isFeatureEnabled("phase-175") || isFeatureEnabled("phase-177")
+  if (atomic) {
+    const timestamp = body.timestamp
+    if (typeof timestamp !== "number" || !Number.isSafeInteger(timestamp) || Math.abs(Date.now() - timestamp) > 300_000 || typeof body.signature !== "string" ||
+      !(await verifySignalSignature(wallet, { title: `market:${id}:${offer_id}:${action}`, body: wallet, timestamp }, body.signature))) {
+      return NextResponse.json({ code: "INVALID_SIGNATURE" }, { status: 401 })
+    }
+  }
   const listing = await getListing(id)
   if (!listing) return NextResponse.json({ error: "Listing not found" }, { status: 404 })
   if (listing.seller_wallet !== wallet) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -49,12 +57,16 @@ export async function POST(
   if (offer.status !== "pending") return NextResponse.json({ error: "Offer not pending" }, { status: 409 })
 
   const newStatus = action === "accept" ? "accepted" : "rejected"
-  const updated = await updateOfferStatus(offer_id, newStatus)
+  let updated
+  try { updated = atomic ? decideOfferAtomic(id, offer_id, wallet, action) : await updateOfferStatus(offer_id, newStatus) }
+  catch (error) {
+    return NextResponse.json({ code: "OFFER_CONFLICT", current_status: error instanceof Error && "current_status" in error ? error.current_status : "unavailable" }, { status: 409 })
+  }
 
   // If accepted, mark listing as sold
   let royalty: Awaited<ReturnType<typeof recordRoyaltyPayout>> | null = null
   if (action === "accept") {
-    await soldListing(id)
+    if (!atomic) await soldListing(id)
 
     // phase-143: time-to-sale for the suggestion this listing was priced from.
     if (isPricingOracleEnabled()) {
@@ -86,5 +98,5 @@ export async function POST(
       .catch(() => { /* silent */ })
   }
 
-  return NextResponse.json({ ok: true, offer: updated, ...(royalty ? { royalty } : {}), ...(splits ? { splits } : {}) })
+  return NextResponse.json({ ok: true, offer: updated, ...(royalty ? { royalty } : {}) })
 }

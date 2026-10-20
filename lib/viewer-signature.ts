@@ -14,6 +14,12 @@
 /** SEP-53 fixed prefix, concatenated with the message before hashing. */
 export const SIGNATURE_PREFIX = "Stellar Signed Message:\n"
 
+/** Presentation identifier only. Authorization always requires a verified signature. */
+export function viewerSignatureShort(wallet: string | null | undefined): string {
+  if (!wallet) return ""
+  return `${wallet.slice(0, 6)}…${wallet.slice(-4)}`
+}
+
 /** Canonical payload signed/proven for a community signal. */
 export type SignalProofPayload = {
   title: string

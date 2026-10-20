@@ -697,3 +697,15 @@ Flag: `phase-169` (`NEXT_PUBLIC_FEATURE_PHASE_169` / `FEATURE_PHASE_169`). Defau
 
 
 
+
+
+## Spikes 620/621/630/631 — mobile, inbound links, screening and CSV
+
+Flags `phase-174` through `phase-177` default off. Set literal public flags at build time for browser features; server-only flags cannot enable browser UI. Rollback requires unsetting both public/server flags and rebuilding/restarting. New SQLite tables are additive and stay inert when their features are off; do not delete reporting evidence during rollback. No contract deployment, token migration, issuer rotation or gateway change is part of these spikes.
+
+- Mobile layout: one responsive breakpoint at 768px; `useMobileViewport` publishes the actual viewport height and cleans up listeners. Radix sheets provide focus management and Escape handling; custom Forge/Chamber overlays trap phone focus and restore the opener. Pointer capture keeps drawing inside the canvas without stealing page scroll elsewhere.
+- Link capture: `phase://quest/ID`, `stellar://phase/quest/ID`, and same-origin `/link/quest/ID` share a parser. Offer paths contain listing and offer IDs; collection IDs are positive safe integers. Arbitrary callbacks, other origins, duplicate parameters and invalid G addresses are rejected. Capture survives wallet connection in sessionStorage without initiating a claim or signing. Target actions revalidate server-side. Browser fallback `/link` accepts pasted custom URIs; SEP-7 `pay`/`tx` requests are deliberately rejected rather than reinterpreted as Soroban intents.
+- Compliance: `PHASE_KYC_MODE=off|mock|live`, threshold in exact stroops. Each protected request screens against the configured HTTPS adapter (3s timeout, no redirect/cache). A result older than one hour or already expired fails closed. Webhook signing format is HMAC-SHA256(timestamp + '.' + raw UTF-8 body), with millisecond timestamps and 5-minute skew. Providers must bind subjects to wallets before invoking this operator adapter. `expectedVersion` starts at zero; stale callbacks return 409/current_version. 2FA and identity verification remain separate.
+- Reporting: confirmed faucet/bootstrap receipts and unverified marketplace agreements enter `tax_events` with stable event keys. No historical basis/FX reconstruction is invented. Export requires a SEP-53 signature binding wallet, network, UTC range, policy, expiry and nonce. Private no-store responses carry a safe attachment filename and X-Tax-Snapshot. Each CSV record carries a chained recomputation hash. Pages use `(occurred_at, seq)` ordering at a frozen maximum sequence; same-time records cannot fall between pages. Wash/unverified records remain visibly flagged and excluded from proceeds/gains/income.
+
+API request/response details and outstanding live proof requirements are in [mobile integration API](api/mobile-integration.md) and [spike evidence](spikes/620-621-630-631-integration.md).

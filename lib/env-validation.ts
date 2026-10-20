@@ -183,6 +183,7 @@ export const serverEnvSchema = z.object({
 
 export function validateClientEnv(rawEnv: Record<string, string | undefined> = process.env): EnvValidationResult {
   const errors: EnvValidationError[] = []
+
   const parsed = clientEnvSchema.safeParse(rawEnv)
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
@@ -234,8 +235,21 @@ export function validateServerEnv(rawEnv: Record<string, string | undefined> = p
  * Valida la configuración completa de entorno para PHASE
  */
 export function validatePhaseEnv(): EnvValidationResult {
-  const errors: EnvValidationError[] = []
   const env = process.env || {}
+  const errors: EnvValidationError[] = []
+  if (env.FEATURE_PHASE_176 === "1" || env.NEXT_PUBLIC_FEATURE_PHASE_176 === "1") {
+    const mode = env.PHASE_KYC_MODE ?? "off"
+    if (!["off", "mock", "live"].includes(mode) || (mode === "mock" && env.STELLAR_NETWORK === "mainnet")) {
+      errors.push({ variable: "PHASE_KYC_MODE", issue: "invalid_format", message: "Invalid KYC mode for this network.", hint: "Use off, mock (testnet only), or live." })
+    }
+    if (mode !== "off") for (const key of ["PHASE_KYC_HASH_KEY", "PHASE_KYC_WEBHOOK_SECRET"] as const) {
+      if ((env[key]?.length ?? 0) < 32) errors.push({ variable: key, issue: "missing", message: "Compliance key must contain at least 32 characters.", hint: "Configure a private server-runtime key." })
+    }
+    if (mode === "live") {
+      try { if (new URL(env.PHASE_SANCTIONS_URL ?? "").protocol !== "https:") throw new Error() }
+      catch { errors.push({ variable: "PHASE_SANCTIONS_URL", issue: "invalid_format", message: "HTTPS screening endpoint required.", hint: "Configure the server-side sanctions adapter URL." }) }
+    }
+  }
 
   const clientRes = validateClientEnv(env)
   if (!clientRes.valid) errors.push(...clientRes.errors)

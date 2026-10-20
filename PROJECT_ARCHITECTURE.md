@@ -211,6 +211,11 @@ is a fixed-size digest of the canonical payload, keeping it under wallet
 | `phase-167` | `NEXT_PUBLIC_FEATURE_PHASE_167` / `FEATURE_PHASE_167` | WalletConnect v2 mobile session resilience (`lib/walletconnect-resilience.ts`): configurable relay URL, multi-chain support, session persistence, chain-switch guard, and mobile deep-link return. Spike 623 (issue #486) | off | Unset var, restart — WalletConnect banner and reconnect actions disabled, kit falls back to default single-session behavior |
 | `phase-168` | `NEXT_PUBLIC_FEATURE_PHASE_168` / `FEATURE_PHASE_168` | xBull wallet full support and parity (`lib/xbull-adapter.ts`): Freighter-difference matrix, xBull module detection, sign result normalization, trustline error translation, and badge surfacing. Spike 624 (issue #487) | off | Unset var, restart — xBull transactions fall through generic kit handlers, badge hidden |
 | `phase-169` | `NEXT_PUBLIC_FEATURE_PHASE_169` / `FEATURE_PHASE_169` | Ledger blind-signing to clear-signing review for Soroban (`lib/ledger-soroban-decoder.ts`): invokeHostFunction pre-image decode, verification code, on-device review modal, Gate #13 preemptive validation, and hardware error humanizer. Spike 625 (issue #488) | off | Unset var, restart — Ledger transactions fall back to default blind-signing flow without preflight review modal |
+| `phase-174` | `NEXT_PUBLIC_FEATURE_PHASE_174` / `FEATURE_PHASE_174` | Mobile Forge/Chamber viewport, controls sheet, focus and touch layout (#483) | off | Unset both vars and restart; no stored layout state |
+| `phase-175` | `NEXT_PUBLIC_FEATURE_PHASE_175` / `FEATURE_PHASE_175` | Validated inbound offer/quest/collection links with wallet-connect intent retention (#484) | off | Unset both vars and restart; session intent inert; association endpoints return 404 |
+| `phase-176` | `NEXT_PUBLIC_FEATURE_PHASE_176` / `FEATURE_PHASE_176` | Amount-aware KYC and fresh sanctions adapter before credits (#493); additionally requires PHASE_KYC_MODE | off | Unset both vars and restart; additive credential tables remain inert |
+| `phase-177` | `NEXT_PUBLIC_FEATURE_PHASE_177` / `FEATURE_PHASE_177` | Durable transaction evidence and signed CSV export (#494) | off | Unset both vars and restart; additive evidence remains inert; export returns 404 |
+
 
 
 
@@ -261,3 +266,13 @@ Collection metadata for explorer verification badges:
   - relevant API docs
 - Contract/address changes require synchronized env and docs updates.
 - Flag-gated features must document rollback in this table and in `docs/TECHNICAL.md` § Feature Flags.
+
+## 13) Mobile inbound links, compliance, and reporting (spikes 620/621/630/631)
+
+Mobile UI follows `visualViewport` with a `100dvh` fallback. The Chamber controls use a modal sheet on phones; desktop retains the grid. Inbound links pass a strict, same-origin intent schema and a review screen before navigation. Session intent has a 15-minute lifetime. A suggested recipient is untrusted context, never authority to sign or transfer. `/link/collection/N` rewrites to Chamber with its collection parameter preserved for metadata generation. Custom URI input is supported at `/link`; native scheme registration belongs to the native host.
+
+Compliance is a server pre-credit gate, independent of denial lists, Turnstile, sybil scoring and 2FA. Live sanctions results must be fresh; provider outage returns 503 with Retry-After. Identity callbacks use signed exact bytes, time bounds, SQLite event uniqueness and version checks; only keyed hashes of wallets/provider subjects are persisted. No identity documents are accepted. Mock mode is testnet-only. This is an integration adapter, not a declaration of regulatory compliance.
+
+Tax evidence is additive and append-only in SQLite. Amounts are integer stroops stored as text. Offer decisions and their unverified reporting evidence commit in one immediate transaction; acceptance alone is never labeled as an on-chain payment. CSV uses signed, expiring, one-use export authorization, a sequence snapshot and 50-row pages. Missing cost basis and FX are explicit, not inferred as zero. This testnet export is not a filed tax form. No contracts, addresses or WASM are changed.
+
+See [implementation and acceptance evidence](docs/spikes/620-621-630-631-integration.md) for file decisions, remaining deployment prerequisites and validation limits.

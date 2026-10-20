@@ -7,6 +7,9 @@ import { readJsonFile, updateJsonFile } from "@/lib/json-store";
 import { serverDataJsonPath } from "@/lib/server-data-paths";
 import { getDb } from "@/lib/sqlite-db";
 import { incSecurityCounter } from "@/lib/security-counters";
+import { recordTaxEvent } from "@/lib/tax-report";
+import { decimalToStroops } from "@/lib/decimal-amount";
+import { phaseProtocolContractIdForServer } from "@/lib/phase-protocol";
 
 export type ListingStatus = "active" | "sold" | "cancelled";
 export type OfferStatus = "pending" | "accepted" | "rejected" | "expired";
@@ -14,6 +17,7 @@ export type OfferStatus = "pending" | "accepted" | "rejected" | "expired";
 export type Listing = {
   id: string;
   token_id: number;
+  contract_id?: string;
   collection_id: number;
   seller_wallet: string;
   price_phaselq: number;
@@ -208,6 +212,7 @@ export async function getCreatorProfileViewAnalytics(
 type ListingRow = {
   id: string;
   token_id: number;
+  contract_id: string | null;
   collection_id: number;
   seller_wallet: string;
   price_phaselq: number;
@@ -235,6 +240,7 @@ function rowToListing(row: ListingRow): Listing {
   return {
     id: row.id,
     token_id: row.token_id,
+    contract_id: row.contract_id ?? undefined,
     collection_id: row.collection_id,
     seller_wallet: row.seller_wallet,
     price_phaselq: row.price_phaselq,
@@ -438,6 +444,7 @@ export async function createListing(
 ): Promise<Listing> {
   const listing: Listing = {
     ...data,
+    contract_id: isFeatureEnabled("phase-177") ? phaseProtocolContractIdForServer() : undefined,
     id: randomUUID(),
     listed_at: Date.now(),
     status: "active",
@@ -466,8 +473,8 @@ export async function createListing(
          (id, token_id, collection_id, seller_wallet, price_phaselq,
           accepts_offers, min_offer, image, name, listed_at, status,
           creator_wallet, royalty_bps, edition_number, edition_size, is_artist_proof, supply_mode,
-          drop_start_at, drop_end_at, dutch_start_price, dutch_floor_price, dutch_end_at, split_payees_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          drop_start_at, drop_end_at, dutch_start_price, dutch_floor_price, dutch_end_at, split_payees_json, contract_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       listing.id,
@@ -493,6 +500,7 @@ export async function createListing(
       listing.dutch_floor_price ?? null,
       listing.dutch_end_at ?? null,
       listing.split_payees ? JSON.stringify(listing.split_payees) : null,
+      listing.contract_id ?? null,
     );
   return listing;
 }
@@ -642,6 +650,42 @@ export async function updateOfferStatus(
     .prepare("SELECT * FROM offers WHERE id = ?")
     .get(offer_id) as OfferRow;
   return rowToOffer(row, Date.now());
+}
+
+/** One SQLite transaction owns the decision and its reporting evidence. */
+export function decideOfferAtomic(listingId: string, offerId: string, wallet: string, action: "accept" | "reject") {
+  const db = getDb()
+  let taxRecords = 0
+  db.exec("BEGIN IMMEDIATE")
+  try {
+    const listingRow = db.prepare("SELECT * FROM listings WHERE id=?").get(listingId) as ListingRow | undefined
+    const offerRow = db.prepare("SELECT * FROM offers WHERE id=? AND listing_id=?").get(offerId, listingId) as OfferRow | undefined
+    if (!listingRow || !offerRow || listingRow.seller_wallet !== wallet) throw new Error("FORBIDDEN")
+    const now = Date.now()
+    if (listingRow.status !== "active" || offerRow.status !== "pending" || offerRow.expires_at <= now || offerRow.buyer_wallet === wallet) {
+      incSecurityCounter("market_accept_conflict")
+      throw Object.assign(new Error("OFFER_CONFLICT"), { current_status: offerRow.expires_at <= now ? "expired" : offerRow.status })
+    }
+    const status = action === "accept" ? "accepted" : "rejected"
+    db.prepare("UPDATE offers SET status=?, decided_at=? WHERE id=? AND status='pending'").run(status, now, offerId)
+    if (action === "accept") {
+      db.prepare("UPDATE listings SET status='sold' WHERE id=? AND status='active'").run(listingId)
+      db.prepare("UPDATE offers SET status='rejected', decided_at=? WHERE listing_id=? AND id<>? AND status='pending'").run(now, listingId, offerId)
+      if (isFeatureEnabled("phase-177")) {
+        const listing = rowToListing(listingRow)
+        const split = isPhase140Enabled() ? computeRoyaltySplit(listing, offerRow.amount_phaselq) : { seller_amount_phaselq: offerRow.amount_phaselq, royalty_amount_phaselq: 0 }
+        const asset = `${listing.contract_id ?? `unknown-contract:${listing.id}`}:${listing.token_id}`
+        // Offer acceptance is an agreement, not a chain receipt. Never report it as verified proceeds.
+        const common = { asset, occurredAt: now, verified: false, washFlagged: !!offerRow.wash_flagged }
+        taxRecords += Number(recordTaxEvent({ ...common, eventKey: `offer:${offerId}:seller`, wallet, kind: "disposal", amountStroops: decimalToStroops(split.seller_amount_phaselq.toFixed(7)) }, false))
+        taxRecords += Number(recordTaxEvent({ ...common, eventKey: `offer:${offerId}:buyer`, wallet: offerRow.buyer_wallet, kind: "acquisition", amountStroops: decimalToStroops(offerRow.amount_phaselq.toFixed(7)) }, false))
+        if (listing.creator_wallet && split.royalty_amount_phaselq > 0) taxRecords += Number(recordTaxEvent({ ...common, eventKey: `offer:${offerId}:royalty`, wallet: listing.creator_wallet, kind: "royalty", amountStroops: decimalToStroops(split.royalty_amount_phaselq.toFixed(7)) }, false))
+      }
+    }
+    db.exec("COMMIT")
+    if (taxRecords) incSecurityCounter("tax_event_recorded", taxRecords)
+    return rowToOffer({ ...offerRow, status }, now)
+  } catch (error) { db.exec("ROLLBACK"); throw error }
 }
 
 export async function getOffersByBuyer(

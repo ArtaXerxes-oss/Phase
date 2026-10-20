@@ -36,6 +36,14 @@ const nextConfig = {
   },
   async headers() {
     return [
+      {
+        source: "/.well-known/:association(assetlinks.json|apple-app-site-association)",
+        headers: [
+          { key: "Content-Type", value: "application/json" },
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Cache-Control", value: "public, max-age=300" },
+        ],
+      },
       // Security headers — applied to every route
       {
         source: "/(.*)",

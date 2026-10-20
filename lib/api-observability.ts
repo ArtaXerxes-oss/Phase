@@ -1,3 +1,5 @@
+import { redactSecrets } from "@/lib/x402-dead-letter"
+import { isFeatureEnabled } from "@/lib/feature-flags"
 import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 
@@ -36,7 +38,7 @@ export function createApiRequestContext(request: NextRequest, route: string) {
       route,
       method: request.method,
       correlationId,
-      ...metadata,
+      ...(isFeatureEnabled("phase-176") ? redactSecrets(metadata) as ApiMetadata : metadata),
     }
     const line = JSON.stringify(payload)
 
