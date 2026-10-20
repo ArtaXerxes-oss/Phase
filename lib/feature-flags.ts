@@ -161,7 +161,8 @@ export type PhaseFeatureFlag =
   | "phase-173"
   | "phase-174"
   | "phase-175"
-  | "phase-176";
+  | "phase-176"
+  | "phase-177";
 
 const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-50": ["NEXT_PUBLIC_FEATURE_PHASE_50", "FEATURE_PHASE_50"],
@@ -248,6 +249,7 @@ const FLAG_ENV_MAP: Record<PhaseFeatureFlag, string[]> = {
   "phase-174": ["NEXT_PUBLIC_FEATURE_PHASE_174", "FEATURE_PHASE_174"],
   "phase-175": ["NEXT_PUBLIC_FEATURE_PHASE_175", "FEATURE_PHASE_175"],
   "phase-176": ["NEXT_PUBLIC_FEATURE_PHASE_176", "FEATURE_PHASE_176"],
+  "phase-177": ["NEXT_PUBLIC_FEATURE_PHASE_177", "FEATURE_PHASE_177"],
 };
 
 /** Canonical ordered list of all feature flags (fixes prior missing phase-134/135 & duplicate phase-128). */
@@ -336,6 +338,7 @@ export const ALL_FEATURE_FLAGS: readonly PhaseFeatureFlag[] = [
   "phase-174",
   "phase-175",
   "phase-176",
+  "phase-177",
 ] as const;
 
 function isTruthy(v: string | undefined): boolean {
@@ -1128,4 +1131,16 @@ export function isAnalyticsWarehouseEnabled(wallet?: string): boolean {
 export function phase176RollbackNote(): string {
   return flagRollbackNote("phase-176");
 }
+
+/**
+ * Spike 611 / phase-177: Funnel analytics v2 with retention cohorts: Day-N, wallet-age bands, quest cohorts.
+ */
+export function isFunnelRetentionEnabled(wallet?: string): boolean {
+  return isFeatureEnabled("phase-177", { wallet });
+}
+
+export function phase177RollbackNote(): string {
+  return flagRollbackNote("phase-177");
+}
+
 

@@ -722,6 +722,17 @@ Flag: `phase-176` (`NEXT_PUBLIC_FEATURE_PHASE_176` / `FEATURE_PHASE_176`). Defau
 - Bounded closed-label metadata: `sanitizeAnalyticsMetadata` caps keys at 25, truncates string lengths to 256, and strips authentication tokens, cookies, secrets, and private keys.
 - Unified funnel queries & Article 20 portability: `getUnifiedFunnelAnalytics` computes stage-by-stage counts, drop-offs, conversion rates, and average time-to-convert (ms); `exportAnalyticsForWallet` produces GDPR Article 20 data portability exports; backward-compatible migration automatically drains legacy `faucet-funnel-events.json` 5k-ring into SQLite on first initialization.
 
+## 23. Funnel analytics v2 with retention cohorts: day-N, wallet-age bands and quest cohorts (spike 611)
+
+Flag: `phase-177` (`NEXT_PUBLIC_FEATURE_PHASE_177` / `FEATURE_PHASE_177`). Default off. Rollback: unset var, restart.
+
+- Day-N retention cohorts: `computeFunnelRetention` (`lib/funnel-retention.ts`) tracks Day-1, Day-3, Day-7, Day-14, and Day-30 retention joins against user genesis and claim milestones from `faucet-claims.json` and SQLite analytics events.
+- Time-to-convert metrics: computes mean, median (p50), and 90th percentile (p90) elapsed time across key funnel transitions (`viewed -> connected -> started -> confirmed`).
+- Wallet-age bands & bulkhead cache: classifies wallets into `<24h`, `1-7d`, `7-30d`, and `>30d` using `getWalletAgeBandCached` (`lib/horizon-bulkhead.ts`), routing on-chain age queries through process-local bulkhead limits and caching results to prevent Horizon 429 rate limits.
+- Sybil-weighted retention: joins wallet activity with `classifyWalletForCohorts` (`lib/sybil-resistance.ts`) to isolate true organic user retention from suspect bot farms across `trusted`, `caution`, and `suspect` cohorts.
+- Race-safe referral attribution: migrates `lib/referral-quest.ts` from unguarded file reads/writes to `updateStore` (`lib/json-store.ts`) under process locks, preventing concurrent claim collisions.
+
+
 
 
 

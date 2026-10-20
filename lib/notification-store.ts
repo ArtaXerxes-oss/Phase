@@ -5,6 +5,7 @@ import { isFeatureEnabled, flagRollbackNote } from "@/lib/feature-flags"
 import { readJsonFile, updateStore, updateStoreWithReader } from "@/lib/json-store"
 import { serverDataJsonPath } from "@/lib/server-data-paths"
 import { isAnalyticsWarehouseEnabled, recordWarehouseEvent } from "@/lib/analytics-warehouse"
+import { isFunnelRetentionEnabled, computeFunnelRetention, type FunnelRetentionReport } from "@/lib/funnel-retention"
 
 export type NotificationType =
   | "mint_in_collection"
@@ -515,6 +516,14 @@ export function computeClaimFunnel(events: readonly FaucetFunnelEvent[], opts: {
 export async function getFaucetFunnelAnalytics(opts: { windowMs?: number; now?: number } = {}): Promise<ClaimFunnelReport> {
   const store = await readFunnelStore()
   return computeClaimFunnel(store.events, opts)
+}
+
+/**
+ * phase-177 / Spike 611: Funnel analytics v2 with Day-N retention cohorts,
+ * wallet-age bands, and sybil-weighted cohort analytics.
+ */
+export async function getRetentionCohortsAnalytics(opts: { windowMs?: number; now?: number } = {}): Promise<FunnelRetentionReport> {
+  return computeFunnelRetention(opts)
 }
 
 export function auditFaucetAnalyticsWiring(): { ok: boolean; note: string } {

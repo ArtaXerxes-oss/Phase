@@ -379,3 +379,14 @@ function getAchievementImportance(id: AchievementId): number {
   };
   return weights[id] ?? 0.5;
 }
+
+/** Spike 611: Expose achievement unlock history for retention cohort joins. */
+export async function getAchievementCohortData(): Promise<Record<string, Achievement[]>> {
+  const store = await readStore();
+  const out: Record<string, Achievement[]> = {};
+  for (const [w, data] of Object.entries(store)) {
+    out[w] = data.unlocked ?? [];
+  }
+  return out;
+}
+

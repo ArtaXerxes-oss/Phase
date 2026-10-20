@@ -15,17 +15,33 @@ import {
   recordFaucetFunnelEvent,
   type GatewayAuthRotation,
   type NotificationPreferences,
+  getRetentionCohortsAnalytics,
 } from "@/lib/notification-store"
 import {
   isAnalyticsWarehouseEnabled,
   getUnifiedFunnelAnalytics,
   recordWarehouseEvent,
 } from "@/lib/analytics-warehouse"
+import { isFunnelRetentionEnabled } from "@/lib/funnel-retention"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
+  // Spike 611 (phase-177): funnel analytics v2 with retention cohorts
+  if (request.nextUrl.searchParams.get("retention") === "1" || request.nextUrl.searchParams.get("cohort") === "1") {
+    if (!isFunnelRetentionEnabled()) {
+      return NextResponse.json(
+        { error: "funnel retention analytics disabled", code: "FLAG_DISABLED", feature_enabled: false },
+        { status: 404 },
+      )
+    }
+    const windowParam = Number(request.nextUrl.searchParams.get("windowMs"))
+    const windowMs = Number.isFinite(windowParam) && windowParam > 0 ? windowParam : undefined
+    const retention_report = await getRetentionCohortsAnalytics({ windowMs })
+    return NextResponse.json({ retention_report, feature_enabled: true })
+  }
+
   // Spike 610 (phase-176): unified analytics warehouse query
   if (request.nextUrl.searchParams.get("warehouse") === "1") {
     if (!isAnalyticsWarehouseEnabled()) {
@@ -72,6 +88,7 @@ export async function GET(request: NextRequest) {
     gateway_auth_rotation_feature_enabled: isPhase128Enabled(),
     faucet_analytics_feature_enabled: isFaucetAnalyticsEnabled(),
     warehouse_feature_enabled: isAnalyticsWarehouseEnabled(),
+    retention_feature_enabled: isFunnelRetentionEnabled(),
   })
 }
 

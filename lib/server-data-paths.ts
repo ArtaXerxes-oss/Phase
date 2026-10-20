@@ -51,6 +51,7 @@ const FILES = {
   ledgerAudit: "ledger-audit.json",
   featureFlagOps: "feature-flag-ops.json",
   analyticsWarehouse: "analytics-warehouse.json",
+  referralQuests: "referral-quest.json",
 } as const
 
 

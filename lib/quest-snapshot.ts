@@ -38,6 +38,7 @@ export type QuestSnapshotEntry = {
   wallet: string
   progress: Record<QuestId, QuestProgress>
   snapshotAt: number
+  cohortKey?: string
 }
 
 type QuestSnapshotStore = Record<string, QuestSnapshotEntry>

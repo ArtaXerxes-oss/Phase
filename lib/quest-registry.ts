@@ -570,3 +570,9 @@ export function getQuestRewardAmount(registry: QuestRegistry, questId: string): 
 export function isValidQuestId(registry: QuestRegistry, questId: string): boolean {
   return registry.quests.some((q) => q.id === questId && q.enabled)
 }
+
+/** Spike 611: Export quest definitions for retention cohort grouping. */
+export function getQuestCohortKeys(registry: QuestRegistry): string[] {
+  return registry.quests.map((q) => q.id)
+}
+

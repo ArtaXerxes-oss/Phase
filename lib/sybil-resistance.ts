@@ -354,3 +354,19 @@ export function lobbyAdmissionForBand(band: "trusted" | "caution" | "suspect"): 
   if (band === "caution") return "challenge";
   return "deny";
 }
+
+/**
+ * Spike 611: Expose sybil band and account age for cohort analytics.
+ */
+export async function classifyWalletForCohorts(
+  address: string,
+): Promise<{ band: SybilBand; accountAgeDays: number; score: number } | null> {
+  const features = await fetchAccountHistoryFeatures(address).catch(() => null)
+  if (!features) return null
+  const scoreResult = scoreWalletHistory(features)
+  return {
+    band: scoreResult.band,
+    accountAgeDays: features.accountAgeDays,
+    score: scoreResult.score,
+  }
+}
