@@ -185,6 +185,14 @@ is a fixed-size digest of the canonical payload, keeping it under wallet
 
 Flags are read via `lib/feature-flags.ts:isFeatureEnabled`. Client flags use `NEXT_PUBLIC_*`, server also accepts `FEATURE_*`. Zero regression when off.
 
+> **Proposed spike batch 550–599 is design-only.** The four spike docs and their
+> proposed gates (`phase-550` refunds, `phase-551` live updates, `phase-552`
+> collaborative canvas, `phase-553` WebGL viewer) are indexed in
+> [`docs/spikes/SPIKE_INDEX_550_599.md`](docs/spikes/SPIKE_INDEX_550_599.md).
+> None of those flags is registered in `lib/feature-flags.ts` yet; a flag is
+> added only when there is a route or behavior to gate. See each doc for its
+> rollback row and acceptance evidence.
+
 ## 11) Change-management rules
 
 - Architectural changes require updates to:

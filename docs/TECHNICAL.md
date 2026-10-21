@@ -308,6 +308,13 @@ NEXT_PUBLIC_FEATURE_PHASE_140=1
 
 Rollback: unset the var or set `0` and restart. No ledger migration to revert; off-chain stores remain but are ignored when flag off. See `PROJECT_ARCHITECTURE.md` §10.
 
+**Proposed, not registered:** spike batch 550–599 (refundable settlement, live
+updates, collaborative canvas, WebGL viewer) is documented in
+[`docs/spikes/SPIKE_INDEX_550_599.md`](./spikes/SPIKE_INDEX_550_599.md). The
+proposed names `phase-550`–`phase-553` are intentionally absent from
+`lib/feature-flags.ts` until a route or behavior exists to gate; each spike doc
+carries its own rollback and acceptance plan.
+
 ---
 
 ## 10. Security and Operations
