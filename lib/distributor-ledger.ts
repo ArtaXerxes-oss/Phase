@@ -323,3 +323,10 @@ export function resetLedgerForTests(distributor?: string): void {
   db.exec("DELETE FROM distributor_reservations;")
   db.exec("DELETE FROM distributor_ledger;")
 }
+
+// ── Spike 672 (flag-gated): drop-inventory hold purpose builder ──
+// Reserve/commit/release flow is unchanged; drops use purpose `drop:<collection_id>` so
+// holds are attributable and releasable on rollback (flag off = no holds created).
+export function dropHoldPurpose(collectionId: number): string {
+  return `drop:${collectionId}`;
+}

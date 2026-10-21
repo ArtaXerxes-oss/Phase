@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { StrKey } from "@stellar/stellar-sdk"
 import { getListings, createListing, isPhase140Enabled } from "@/lib/market-store"
+import {
+  getSuggestionBand,
+  isPricingOracleEnabled,
+  priceWarningFor,
+  recordSuggestionOutcome,
+} from "@/lib/pricing-oracle"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -9,12 +15,16 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const collectionId = searchParams.get("collection")
   const sellerWallet = searchParams.get("seller")
-  const sort = searchParams.get("sort") as "price_asc" | "price_desc" | "newest" | null
+  const sort = searchParams.get("sort") as "price_asc" | "price_desc" | "newest" | "edition_asc" | null
+  const drop = searchParams.get("drop") as "live" | "upcoming" | "ended" | null
+  const excludeAp = searchParams.get("exclude_ap") === "1"
 
   const listings = await getListings({
     collection_id: collectionId ? Number(collectionId) : undefined,
     seller_wallet: sellerWallet ?? undefined,
     sort: sort ?? "newest",
+    drop: drop ?? undefined,
+    exclude_artist_proof: excludeAp || undefined,
   })
   return NextResponse.json({ listings })
 }
@@ -30,6 +40,8 @@ type CreateBody = {
   name?: unknown
   creator_wallet?: unknown
   royalty_bps?: unknown
+  suggestion_id?: unknown
+  lang?: unknown
 }
 
 export async function POST(request: NextRequest) {
@@ -85,5 +97,31 @@ export async function POST(request: NextRequest) {
     creator_wallet,
     royalty_bps,
   })
-  return NextResponse.json({ listing }, { status: 201 })
+
+  // phase-143: close the loop on a shown suggestion. Recorded after the listing
+  // exists and never able to fail it — the listing is the user's action, the
+  // outcome is measurement. The price warning is advisory only.
+  let price_suggestion: ReturnType<typeof recordSuggestionOutcome> | undefined
+  let price_warning: string | null = null
+  if (isPricingOracleEnabled() && typeof body.suggestion_id === "string" && body.suggestion_id.trim()) {
+    const suggestionId = body.suggestion_id.trim()
+    try {
+      price_suggestion = recordSuggestionOutcome({
+        suggestionId,
+        sellerWallet: seller_wallet,
+        collectionId: collection_id,
+        listingId: listing.id,
+        listedPrice: price_phaselq,
+      })
+      const band = getSuggestionBand(suggestionId)
+      if (band) price_warning = priceWarningFor(price_phaselq, band, body.lang === "es" ? "es" : "en")
+    } catch (error) {
+      console.warn("[phase-143] suggestion outcome not recorded:", error)
+    }
+  }
+
+  return NextResponse.json(
+    { listing, ...(price_suggestion ? { price_suggestion, price_warning } : {}) },
+    { status: 201 },
+  )
 }

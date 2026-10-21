@@ -111,3 +111,8 @@ export async function GET(
     },
   )
 }
+
+// ── Spike 673: edition attributes ride the existing 60s CDN body (per-token URL, no extra
+// Vary needed). Token renumbering rule: existing token_id names/URIs are stable; new mints
+// append `edition` / `artist_proof` traits via buildPhaseTokenMetadataJson. Cache invalidation
+// is natural expiry (s-maxage=60). No header change when flag off.

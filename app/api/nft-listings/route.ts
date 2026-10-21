@@ -134,3 +134,7 @@ export async function POST(req: NextRequest) {
   await writeListings([...deactivated, listing])
   return NextResponse.json({ ok: true, listing })
 }
+
+// ── Spike 673 (flag-gated): edition ordering lives in `/api/market?sort=edition_asc`.
+// This legacy JSON store stays uneditioned (no migration); indexers join token_id →
+// edition via `/api/metadata/[id]` attributes when phase-editions is on. No behavior change.

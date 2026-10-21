@@ -280,3 +280,10 @@ export function auditWashTradingWiring(): { ok: boolean; note: string } {
     return { ok: false, note: `[phase-77] audit error: ${e instanceof Error ? e.message : String(e)}` }
   }
 }
+
+// ── Spike 673 (flag-gated): edition-scoped circular-trade hint ──
+// Existing circular/rapid-flip/self detectors are unchanged; this pure helper lets callers
+// partition trade windows per edition_number so one edition cannot launder another.
+export function editionWindowKey(collectionId: number, editionNumber?: number): string {
+  return editionNumber != null ? `${collectionId}:e${editionNumber}` : `${collectionId}:legacy`;
+}

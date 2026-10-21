@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from "@google/generative-ai"
 import { generateForgeImageUrlViaNanobananaApi, nanobananaApiKeyConfigured } from "@/lib/forge-nanobanana"
 import { buildLoreSystemInstruction, buildPollinationsImageUrl, composeForgeImagePrompt, type ForgeImageStyleMode } from "@/lib/forge/prompt-builder"
@@ -113,6 +114,73 @@ export async function generateLoreStep(input: GenerateLoreStepInput): Promise<st
     }
   }
   throw new Error(`GEMINI_GENERATE_FAILED: ${lastError instanceof Error ? lastError.message : String(lastError)}`)
+}
+
+// ── structured JSON step (phase-142/143/146/147) ────────────────────────────
+// The agents built on this never let the model decide anything that moves
+// money, visibility or ranking: they compute the decision deterministically and
+// ask the model only for prose or category scores, which the caller validates
+// against ids it already holds. So this step returns raw parsed JSON and leaves
+// validation to the caller. Unlike the forge, it keeps the provider's default
+// safety thresholds: these prompts embed third-party lore, not the requester's
+// own creative prompt.
+
+const AI_JSON_TIMEOUT_MS = Number(process.env.PHASE_AI_JSON_TIMEOUT_MS ?? 20_000)
+
+export type AiJsonStepInput = {
+  prompt: string
+  timeoutMs?: number
+}
+
+export type AiJsonStepResult = {
+  json: unknown
+  modelId: string
+  outputChars: number
+  /** Set when the provider refused the prompt itself (e.g. SAFETY); `json` is null. */
+  blockReason?: string
+}
+
+/** Injectable so the agents are testable without a network or an API key. */
+export type AiJsonGenerator = (input: AiJsonStepInput) => Promise<AiJsonStepResult>
+
+export function aiPromptHash(prompt: string): string {
+  return createHash("sha256").update(prompt, "utf8").digest("hex").slice(0, 16)
+}
+
+function parseModelJson(text: string): unknown {
+  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "")
+  return JSON.parse(trimmed)
+}
+
+export const generateJsonStep: AiJsonGenerator = async (input) => {
+  const prompt = input.prompt.trim()
+  if (!prompt) throw new Error("EMPTY_PROMPT")
+  const apiKey = forgeGoogleAiApiKey()
+  if (!apiKey) throw new Error("MISSING_GOOGLE_AI_KEY")
+  const genAI = new GoogleGenerativeAI(apiKey)
+  const timeoutMs = input.timeoutMs ?? AI_JSON_TIMEOUT_MS
+  const candidates = geminiModelCandidates()
+
+  let lastError: unknown
+  for (let i = 0; i < candidates.length; i++) {
+    const modelId = candidates[i]!
+    try {
+      const model = genAI.getGenerativeModel(
+        { model: modelId, generationConfig: { responseMimeType: "application/json", temperature: 0.4 } },
+        geminiGenerateRequestOptions(),
+      )
+      const res = await withTimeout(model.generateContent(prompt), timeoutMs, "AI_JSON")
+      const blockReason = res.response.promptFeedback?.blockReason
+      if (blockReason) return { json: null, modelId, outputChars: 0, blockReason: String(blockReason) }
+      const text = res.response.text() ?? ""
+      return { json: parseModelJson(text), modelId, outputChars: text.length }
+    } catch (e) {
+      lastError = e
+      if (isGeminiNonRetryableAcrossModels(e)) break
+    }
+  }
+  const msg = lastError instanceof Error ? lastError.message : String(lastError)
+  throw new Error(`AI_JSON_FAILED: ${msg}`)
 }
 
 // ── image step — Nano Banana → Gemini → Pollinations cascade ─────────────

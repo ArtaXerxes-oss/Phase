@@ -11,6 +11,7 @@ import { getAllWorldCollections } from "@/lib/narrative-world-store"
 import { checkAndUnlock } from "@/lib/achievement-store"
 import { isFeatureEnabled } from "@/lib/feature-flags"
 import { nanoid } from "nanoid"
+import { isModerationTriageEnabled, screenInBackground } from "@/lib/moderation-triage"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -182,6 +183,18 @@ export async function POST(request: NextRequest) {
     ...(typeof body.nft_name === "string" ? { nft_name: body.nft_name } : {}),
     ...(typeof body.nft_image === "string" ? { nft_image: body.nft_image } : {}),
   })
+
+  // phase-146: queue the pre-screen; scoring runs after the response.
+  if (isModerationTriageEnabled()) {
+    screenInBackground({
+      targetKind: "signal",
+      targetId: signal.id,
+      authorWallet: walletStr,
+      title: signal.title,
+      body: signal.body,
+      hasMedia: Boolean(signal.nft_image),
+    })
+  }
 
   // Achievements: fire-and-forget
   void checkAndUnlock(walletStr, { signal_posted: true }).catch(() => { /* silent */ })

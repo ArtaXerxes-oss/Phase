@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { StrKey } from "@stellar/stellar-sdk"
-import { createOffer, getListing, getOffers, isPhase100Enabled, recordCreatorProfileView } from "@/lib/market-store"
+import { createOffer, getListing, getOffers, isPhase100Enabled, recordCreatorProfileView, dropStatusForListing, currentDutchPrice, isPhaseTimedDropsEnabled, isPhaseDutchAuctionEnabled } from "@/lib/market-store"
 import { createNotification } from "@/lib/notification-store"
 import { createApiRequestContext } from "@/lib/api-observability"
 
@@ -86,6 +86,25 @@ export async function POST(
     // Everything subtler (circular, rapid-flip, sybil clusters) is flagged in
     // createOffer and excluded from volume rather than rejected, because
     // blocking those punishes legitimate buyers.
+    // Spikes 672/675 (flag-gated): 412 DROP_NOT_STARTED (Retry-After) / 409 DROP_ENDED / 409 DUTCH_QUOTE_STALE.
+    if (isPhaseTimedDropsEnabled() && dropStatusForListing(listing) !== "live") {
+      const st = dropStatusForListing(listing);
+      if (st === "upcoming") {
+        const retryAfter = listing.drop_start_at != null ? Math.max(1, Math.min(3600, Math.ceil((listing.drop_start_at - Date.now()) / 1000))) : 60;
+        try { const { incSecurityCounter } = await import("@/lib/security-counters"); incSecurityCounter("drop_claim_rejected"); } catch {}
+        return api.json({ error: "DROP_NOT_STARTED", drop_start_at: listing.drop_start_at }, { status: 412, headers: { "Retry-After": String(retryAfter) }, metadata: { listing_id: id } });
+      }
+      try { const { incSecurityCounter } = await import("@/lib/security-counters"); incSecurityCounter("drop_claim_rejected"); } catch {}
+      return api.json({ error: "DROP_ENDED" }, { status: 409, event: "market.offer.drop_ended", metadata: { listing_id: id } });
+    }
+    if (isPhaseDutchAuctionEnabled() && (listing.dutch_start_price != null || listing.dutch_floor_price != null)) {
+      const current = currentDutchPrice(listing);
+      if (amount_phaselq < current) {
+        try { const { incSecurityCounter: inc2 } = await import("@/lib/security-counters"); inc2("dutch_quote_stale_rejected"); } catch {}
+        return api.json({ error: "DUTCH_QUOTE_STALE", current_price_phaselq: current }, { status: 409, event: "market.offer.dutch_stale", metadata: { listing_id: id } });
+      }
+    }
+
     if (listing.seller_wallet.toUpperCase() === buyer_wallet.toUpperCase()) {
       return api.json(
         { error: "Wash Trade: buyer==seller" },

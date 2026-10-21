@@ -1,5 +1,8 @@
+import { redactSecrets } from "@/lib/x402-dead-letter"
+import { isFeatureEnabled } from "@/lib/feature-flags"
 import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
+import { emitLog } from "@/lib/log-pipeline"
 
 type ApiLogLevel = "info" | "warn" | "error"
 type ApiMetadata = Record<string, unknown>
@@ -29,7 +32,7 @@ export function createApiRequestContext(request: NextRequest, route: string) {
   const correlationId = getIncomingCorrelationId(request)
 
   function log(level: ApiLogLevel, event: string, metadata: ApiMetadata = {}) {
-    const payload = {
+    const payload = emitLog({
       timestamp: new Date().toISOString(),
       level,
       event,
@@ -37,7 +40,7 @@ export function createApiRequestContext(request: NextRequest, route: string) {
       method: request.method,
       correlationId,
       ...metadata,
-    }
+    })
     const line = JSON.stringify(payload)
 
     if (level === "error") console.error(line)
@@ -51,11 +54,29 @@ export function createApiRequestContext(request: NextRequest, route: string) {
     const response = NextResponse.json(body, { ...responseInit, status, headers })
     response.headers.set(CORRELATION_HEADER, correlationId)
     response.headers.set(REQUEST_ID_HEADER, correlationId)
+    const durationMs = Date.now() - startedAt
+    const boundedMetadata = sanitizeAnalyticsMetadata(metadata)
     log(status >= 500 ? "error" : status >= 400 ? "warn" : "info", event, {
       status,
-      durationMs: Date.now() - startedAt,
-      ...metadata,
+      durationMs,
+      ...boundedMetadata,
     })
+
+    if (isAnalyticsWarehouseEnabled()) {
+      void recordWarehouseEvent({
+        surface: "observability",
+        stage: event,
+        correlation_id: correlationId,
+        metadata: {
+          route,
+          method: request.method,
+          status,
+          durationMs,
+          ...boundedMetadata,
+        },
+      }).catch(() => {})
+    }
+
     return response
   }
 
@@ -67,3 +88,15 @@ export function createApiRequestContext(request: NextRequest, route: string) {
 
   return { correlationId, log, json, errorJson }
 }
+
+// ── Spikes 672-675: closed event names for new flows (no PII in events) ──
+export const SPIKE_OBSERVABILITY_EVENTS = [
+  "edition.minted",
+  "edition.supply_exhausted",
+  "collab.split_recorded",
+  "drop.ticket_issued",
+  "drop.claim_rejected",
+  "dutch.price_computed",
+  "dutch.quote_stale_rejected",
+] as const;
+export type SpikeObservabilityEvent = (typeof SPIKE_OBSERVABILITY_EVENTS)[number];

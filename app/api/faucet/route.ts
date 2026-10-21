@@ -1,7 +1,10 @@
+import { recordTaxEvent } from "@/lib/tax-report"
+import { complianceGate } from "@/lib/compliance"
 import { NextRequest, NextResponse } from "next/server"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { serverDataJsonPath } from "@/lib/server-data-paths"
+import { withFileLock } from "@/lib/json-store"
 import {
   classicLiqIssuerForStellarToml,
   expectedClassicPhaserLiqSorobanContractId,
@@ -47,6 +50,22 @@ import {
 import { assessWalletSybilRisk, isSybilResistanceEnabled } from "@/lib/sybil-resistance"
 import { isWalletDenied } from "@/lib/faucet-deny-list"
 import { verifyTurnstileToken, turnstileSiteKeyConfigured } from "@/lib/faucet-turnstile"
+import {
+  abortStepClaim,
+  beginStepClaim,
+  completeStepClaim,
+  defaultArcDeps,
+  getArc,
+  isQuestArcsEnabled,
+  parseArcRewardId,
+  refreshArc,
+  stepClaimable,
+} from "@/lib/quest-arcs"
+import { commitRefill, readLedger, releaseRefill, reserveFunds } from "@/lib/distributor-ledger"
+import { CANONICAL_SOROBAN_ABI_VERSION, isDependencyCadenceEnabled } from "@/lib/dependency-cadence"
+import { incSecurityCounter } from "@/lib/security-counters"
+import { createNotification } from "@/lib/notification-store"
+import { isAnalyticsWarehouseEnabled, recordWarehouseEvent } from "@/lib/analytics-warehouse"
 
 /** Vercel: Hobby ~10s; Pro/Enterprise permite más — subir si el faucet sigue en 504. */
 export const maxDuration = 60
@@ -71,7 +90,7 @@ type WalletClaims = {
   dailyAt?: number
   quests?: Record<string, number>
   /** Mint ya enviado; reutilizamos el hash para seguir el poll sin reenviar (serverless timeout). */
-  faucetPending?: { hash: string; reward: RewardType; at: number }
+  faucetPending?: { hash: string; reward: RewardType; at: number; amountStroops?: string }
 }
 
 type FaucetClaims = Record<string, WalletClaims>
@@ -113,6 +132,8 @@ type RewardStatus = {
 async function parseRewardType(input: unknown): Promise<RewardType> {
   const value = typeof input === "string" ? input.trim().toLowerCase() : ""
   if (value === "genesis" || value === "daily") return value
+  // phase-147: `arc:<uuid>:<step>` only parses while the flag is on.
+  if (isQuestArcsEnabled() && parseArcRewardId(value)) return value
   
   // Check if it's a valid quest ID from the registry
   const registry = await getQuestRegistry()
@@ -125,6 +146,10 @@ function claimsFilePath() {
   return serverDataJsonPath("faucetClaims")
 }
 
+/**
+ * Read faucet claims with file-level locking to prevent concurrent RMW races.
+ * Wraps file I/O in withFileLock to serialize overlapping POSTs to same wallet.
+ */
 async function readClaims(): Promise<FaucetClaims> {
   try {
     const raw = await readFile(claimsFilePath(), "utf8")
@@ -140,8 +165,13 @@ async function readClaims(): Promise<FaucetClaims> {
       const fp = value.faucetPending
       let faucetPending: WalletClaims["faucetPending"]
       if (fp && typeof fp === "object" && typeof fp.hash === "string" && typeof fp.at === "number") {
-        const r = parseRewardType(fp.reward)
-        faucetPending = { hash: fp.hash, reward: r, at: fp.at }
+        const r = await parseRewardType(fp.reward)
+        faucetPending = {
+          hash: fp.hash,
+          reward: r,
+          at: fp.at,
+          ...(typeof fp.amountStroops === "string" ? { amountStroops: fp.amountStroops } : {}),
+        }
       }
       normalized[wallet] = {
         genesisAt: typeof value.genesisAt === "number" ? value.genesisAt : undefined,
@@ -149,17 +179,23 @@ async function readClaims(): Promise<FaucetClaims> {
         quests: value.quests && typeof value.quests === "object" ? value.quests : {},
         faucetPending,
       }
+      return normalized
+    } catch {
+      return {}
     }
-    return normalized
-  } catch {
-    return {}
-  }
+  })
 }
 
+/**
+ * Write faucet claims with file-level locking to prevent partial writes.
+ * Serializes with concurrent reads/writes via withFileLock queue.
+ */
 async function writeClaims(claims: FaucetClaims) {
-  const file = claimsFilePath()
-  await mkdir(path.dirname(file), { recursive: true })
-  await writeFile(file, JSON.stringify(claims, null, 2), "utf8")
+  return withFileLock(claimsFilePath(), async () => {
+    const file = claimsFilePath()
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(file, JSON.stringify(claims, null, 2), "utf8")
+  })
 }
 
 function faucetUsesDistributorTransfer(): boolean {
@@ -195,20 +231,11 @@ function serverTokenContractId(): string {
   return PHASE_LIQ_TOKEN_CONTRACT
 }
 
-function rewardAmountStroops(reward: RewardType): string {
-  if (reward === "genesis") return PHASER_FAUCET_MINT_STROOPS
-  if (reward === "daily") return DAILY_REWARD_STROOPS
-  if (reward === "quest_first_world" || reward === "quest_three_collections") return NEW_QUEST_REWARD_STROOPS
-  return QUEST_REWARD_STROOPS
-}
-
-function isQuestReward(reward: RewardType): reward is QuestId {
-  return QUEST_IDS.includes(reward as QuestId)
-}
-
 async function rewardAmountStroops(reward: RewardType): Promise<string> {
   if (reward === "genesis") return PHASER_FAUCET_MINT_STROOPS
   if (reward === "daily") return DAILY_REWARD_STROOPS
+  const arcRef = parseArcRewardId(reward)
+  if (arcRef) return getArc(arcRef.arcId)?.steps[arcRef.index]?.reward_stroops ?? "0"
   
   // Get reward from quest registry
   const registry = await getQuestRegistry()
@@ -242,6 +269,19 @@ async function claimStatusForReward(claim: WalletClaims, reward: RewardType, now
     }
   }
 
+  // phase-147: arc step claim state lives on the arc row, not in faucet-claims.json.
+  const arcRef = parseArcRewardId(reward)
+  if (arcRef) {
+    const arc = getArc(arcRef.arcId)
+    const step = arc?.steps[arcRef.index]
+    return {
+      claimable: Boolean(arc && step && stepClaimable(arc, arcRef.index, now)),
+      claimedAt: step?.claimed_at ?? null,
+      nextAt: null,
+      amountStroops: step?.reward_stroops ?? "0",
+    }
+  }
+
   const at = claim.quests?.[reward] ?? 0
   return {
     claimable: !at,
@@ -265,7 +305,6 @@ async function buildWalletStatus(wallet: string | null, claims: FaucetClaims) {
     claimStatusForReward(claim, "genesis", now),
     claimStatusForReward(claim, "daily", now),
   ])
-  
   const rewards: Record<string, RewardStatus> = {
     genesis: rawGenesis,
     daily: rawDaily,
@@ -322,6 +361,9 @@ async function buildWalletStatus(wallet: string | null, claims: FaucetClaims) {
     rewards,
     ...(streakInfo ? { streak: streakInfo } : {}),
     ...(referralStats ? { referral: referralStats } : {}),
+    ...(isDependencyCadenceEnabled(wallet ?? undefined)
+      ? { sorobanAbiVersion: CANONICAL_SOROBAN_ABI_VERSION }
+      : {}),
   }
 }
 
@@ -335,7 +377,31 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(await buildWalletStatus(wallet, claims))
 }
 
-async function markClaim(wallet: string, reward: RewardType) {
+/**
+ * phase-147: second phase of an arc step claim, once the payout tx landed.
+ * Idempotent for a re-polled pending hash (completeStepClaim returns early).
+ */
+async function settleArcClaim(wallet: string, reward: RewardType, txHash: string) {
+  const ref = parseArcRewardId(reward)
+  if (!ref) return
+  const { arc, completedNow, holdId } = completeStepClaim(ref.arcId, ref.index, txHash)
+  if (holdId) commitRefill(holdId, txHash)
+  if (completedNow) {
+    void createNotification(wallet, "quest_arc_completed", { arc_id: arc.id, title: arc.title }).catch(() => {})
+  }
+}
+
+/** phase-147: failure path — the step returns to `done` and its treasury hold is released. */
+function abortArcClaim(reward: RewardType) {
+  const ref = parseArcRewardId(reward)
+  if (!ref) return
+  const holdId = abortStepClaim(ref.arcId, ref.index)
+  if (holdId) releaseRefill(holdId)
+}
+
+async function markClaim(wallet: string, reward: RewardType, txHash?: string, amountStroops?: string, occurredAt?: number, tokenContract?: string) {
+  if (txHash && amountStroops && tokenContract) recordTaxEvent({ eventKey: `faucet:${txHash}`, wallet, kind: "reward", asset: tokenContract, amountStroops, txHash, occurredAt: occurredAt ?? Date.now(), verified: true })
+  if (txHash) await settleArcClaim(wallet, reward, txHash)
   questProgressCache.delete(wallet)
   const claims = await readClaims()
   const walletClaim = claims[wallet] ?? {}
@@ -551,7 +617,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Triple check #3: Sybil resistance score (on-chain wallet history)
-  if (isSybilResistanceEnabled()) {
+  if (isSybilResistanceEnabled(userAddress)) {
     const sybilScore = await assessWalletSybilRisk(userAddress)
     if (sybilScore && sybilScore.suspect) {
       return NextResponse.json(
@@ -570,7 +636,7 @@ export async function POST(req: NextRequest) {
   /** Cada intento de claim debe ver el ledger al día (p. ej. acabas de hacer settle). */
   questProgressCache.delete(userAddress)
 
-  const reward = parseRewardType(body.reward)
+  const reward = await parseRewardType(body.reward)
   const claims = await readClaims()
   const walletClaim = claims[userAddress] ?? {}
 
@@ -590,8 +656,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // phase-147: an arc step pays only its owner, in order, once its condition holds.
+  const arcRef = parseArcRewardId(reward)
+  if (arcRef) {
+    const arc = getArc(arcRef.arcId)
+    if (!arc || arc.wallet !== userAddress.toUpperCase()) {
+      return NextResponse.json({ error: "Arc not found for this wallet.", code: "ARC_NOT_FOUND", reward }, { status: 404 })
+    }
+    const refreshed = await refreshArc(arc.id, defaultArcDeps()).catch(() => null)
+    const current = refreshed?.arc ?? arc
+    const step = current.steps[arcRef.index]
+    if (!step || (step.state !== "claiming" && !stepClaimable(current, arcRef.index))) {
+      return NextResponse.json(
+        { error: "Arc step not claimable yet.", code: "ARC_STEP_NOT_CLAIMABLE", reward, stepState: step?.state ?? null },
+        { status: 412 },
+      )
+    }
+  }
+
   // phase-132: validate referral code early (before mint) to fail fast
-  if (reward === "genesis" && body.referralCode && isReferralQuestEnabled()) {
+  if (reward === "genesis" && body.referralCode && isReferralQuestEnabled(userAddress)) {
     const refValidation = await validateReferralCode(body.referralCode, userAddress)
     if (!refValidation.valid) {
       return NextResponse.json(
@@ -601,7 +685,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const status = claimStatusForReward(walletClaim, reward, Date.now())
+  const status = await claimStatusForReward(walletClaim, reward, Date.now())
   if (!status.claimable) {
     const already = status.nextAt
       ? "Reward on cooldown. Claim it again after reset."
@@ -617,6 +701,14 @@ export async function POST(req: NextRequest) {
       { status: status.nextAt ? 429 : 409 },
     )
   }
+
+  let approvedAmountStroops = await rewardAmountStroops(reward)
+  if (reward === "daily" && isStreakMultiplierEnabled()) {
+    const streak = await getStreakInfo(userAddress)
+    if (streak.multiplier > 1) approvedAmountStroops = applyStreakMultiplier(approvedAmountStroops, streak.multiplier)
+  }
+  const complianceBlock = await complianceGate(userAddress, approvedAmountStroops, "faucet")
+  if (complianceBlock) return complianceBlock
 
   const trustlineBlock = await preflightClassicTrustlineForMint(userAddress)
   if (trustlineBlock) return trustlineBlock
@@ -736,9 +828,12 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // phase-147: once a payout is submitted it may still land, so an arc step must
+  // stay `claiming` (and restart only after the pending TTL) rather than revert.
+  let payoutSubmitted = false
   try {
     // phase-133: auto-top-up distributor if balance is low (fire-and-forget, non-blocking)
-    if (isDistributorTopupEnabled() && useTransfer) {
+    if (isDistributorTopupEnabled(source) && useTransfer) {
       void prepareTopup(source).then((topup) => {
         if (topup.shouldTopup) {
           console.log(`[faucet] phase-133 distributor auto-top-up: ${topup.reason}`)
@@ -758,9 +853,21 @@ export async function POST(req: NextRequest) {
 
     if (row.faucetPending?.reward === reward) {
       const pendingHash = row.faucetPending.hash
+      const pinnedAmountStroops =
+        row.faucetPending.amountStroops ?? (await rewardAmountStroops(reward))
+
+      if (isAnalyticsWarehouseEnabled(userAddress)) {
+        void recordWarehouseEvent({
+          surface: "claim",
+          stage: "claim_polling",
+          wallet: userAddress,
+          metadata: { hash: pendingHash, reward, source: "pending_poll" },
+        }).catch(() => {})
+      }
+
       const out = await pollSubmittedMint(server, pendingHash)
       if (out.outcome === "SUCCESS") {
-        await markClaim(userAddress, reward)
+        await markClaim(userAddress, reward, pendingHash, row.faucetPending.amountStroops, row.faucetPending.at, row.faucetPending.tokenContract)
         let streakInfo: StreakInfo | undefined
         if (reward === "daily") {
           const recorded = await recordDailyClaim(userAddress)
@@ -768,30 +875,62 @@ export async function POST(req: NextRequest) {
         }
         // phase-132: record referral bonus on genesis claim
         let referralBonus: string | null = null
-        if (reward === "genesis" && body.referralCode && isReferralQuestEnabled()) {
+        if (reward === "genesis" && body.referralCode && isReferralQuestEnabled(userAddress)) {
           const refResult = await recordReferral(body.referralCode, userAddress)
           referralBonus = refResult.bonus
         }
+
+        if (isAnalyticsWarehouseEnabled(userAddress)) {
+          void recordWarehouseEvent({
+            surface: "claim",
+            stage: "claim_confirmed",
+            wallet: userAddress,
+            metadata: { hash: pendingHash, reward, amountStroops: pinnedAmountStroops },
+          }).catch(() => {})
+        }
+
         return NextResponse.json({
           ok: true,
           hash: pendingHash,
           reward,
-          amountStroops: rewardAmountStroops(reward),
+          amountStroops: pinnedAmountStroops,
           ...(streakInfo ? { streak: streakInfo } : {}),
           ...(referralBonus ? { referralBonus } : {}),
         })
       }
       if (out.outcome === "FAILED") {
         await clearFaucetPendingOnly(userAddress)
+        abortArcClaim(reward)
+
+        if (isAnalyticsWarehouseEnabled(userAddress)) {
+          void recordWarehouseEvent({
+            surface: "claim",
+            stage: "claim_failed",
+            wallet: userAddress,
+            reason: String(out.failed),
+            metadata: { hash: pendingHash, reward },
+          }).catch(() => {})
+        }
+
         return faucetMintLedgerFailedResponse(pendingHash, out.failed)
       }
+
+      if (isAnalyticsWarehouseEnabled(userAddress)) {
+        void recordWarehouseEvent({
+          surface: "claim",
+          stage: "claim_status_202",
+          wallet: userAddress,
+          metadata: { hash: pendingHash, reward },
+        }).catch(() => {})
+      }
+
       return NextResponse.json(
         {
           ok: false,
           hash: pendingHash,
           pending: true,
           reward,
-          amountStroops: rewardAmountStroops(reward),
+          amountStroops: pinnedAmountStroops,
           note: "Transaction still pending on ledger. Retry the same reward in a few seconds.",
         },
         { status: 202 },
@@ -799,6 +938,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (row.faucetPending && row.faucetPending.reward !== reward) {
+      if (isAnalyticsWarehouseEnabled(userAddress)) {
+        void recordWarehouseEvent({
+          surface: "claim",
+          stage: "claim_status_409",
+          wallet: userAddress,
+          reason: "FAUCET_MINT_IN_PROGRESS",
+          metadata: { reward, blockingReward: row.faucetPending.reward },
+        }).catch(() => {})
+      }
+
       return NextResponse.json(
         {
           error:
@@ -811,10 +960,38 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // phase-147: phase one of an arc step claim. When the distributor ledger
+    // tracks this signer, the payout is reserved against its available balance
+    // first, so concurrent arc claims cannot promise more than the treasury
+    // holds. From here every failure exit must call abortArcClaim.
+    if (arcRef) {
+      const amount = await rewardAmountStroops(reward)
+      let holdId: string | null = null
+      if (useTransfer && readLedger(source)) {
+        const hold = reserveFunds({ distributor: source, amountStroops: amount, purpose: "quest_arc" })
+        if (!hold.ok) {
+          incSecurityCounter("quest_arc_claim_unfunded")
+          return NextResponse.json(
+            { error: "Treasury cannot cover this reward right now.", code: "ARC_TREASURY_LOW", reward },
+            { status: 503 },
+          )
+        }
+        holdId = hold.holdId
+      }
+      try {
+        const begun = beginStepClaim(arcRef.arcId, arcRef.index, holdId)
+        if (begun.staleHoldId) releaseRefill(begun.staleHoldId)
+      } catch {
+        if (holdId) releaseRefill(holdId)
+        return NextResponse.json({ error: "Arc step not claimable.", code: "ARC_STEP_NOT_CLAIMABLE", reward }, { status: 409 })
+      }
+    }
+
     let account: Awaited<ReturnType<typeof server.getAccount>>
     try {
       account = await server.getAccount(source)
     } catch (e) {
+      abortArcClaim(reward)
       const msg = e instanceof Error ? e.message : String(e)
       if (/not found/i.test(msg)) {
         return NextResponse.json(
@@ -834,8 +1011,8 @@ export async function POST(req: NextRequest) {
     }
     const c = new Contract(tokenId)
     // phase-131: apply streak multiplier to daily reward amount
-    let effectiveAmountStroops = rewardAmountStroops(reward)
-    if (reward === "daily" && isStreakMultiplierEnabled()) {
+    let effectiveAmountStroops = await rewardAmountStroops(reward)
+    if (reward === "daily" && isStreakMultiplierEnabled(userAddress)) {
       const streak = await getStreakInfo(userAddress)
       if (streak.multiplier > 1) {
         effectiveAmountStroops = applyStreakMultiplier(effectiveAmountStroops, streak.multiplier)
@@ -863,24 +1040,44 @@ export async function POST(req: NextRequest) {
     prepared.sign(signerKp)
     const send = await server.sendTransaction(prepared)
     if (send.status === "ERROR") {
+      abortArcClaim(reward)
       const err = (send as { errorResult?: unknown }).errorResult
+      if (isAnalyticsWarehouseEnabled(userAddress)) {
+        void recordWarehouseEvent({
+          surface: "claim",
+          stage: "claim_status_502",
+          wallet: userAddress,
+          reason: "RPC_SEND_ERROR",
+          metadata: { detail: String(err ?? send) },
+        }).catch(() => {})
+      }
       return NextResponse.json(
         { error: "RPC rechazó la transacción.", detail: String(err ?? send) },
         { status: 502 },
       )
     }
     const hash = send.hash as string
+    payoutSubmitted = true
+
+    if (isAnalyticsWarehouseEnabled(userAddress)) {
+      void recordWarehouseEvent({
+        surface: "claim",
+        stage: "claim_pending",
+        wallet: userAddress,
+        metadata: { hash, reward, amountStroops: effectiveAmountStroops },
+      }).catch(() => {})
+    }
 
     liveClaims = await readClaims()
     liveClaims[userAddress] = {
       ...(liveClaims[userAddress] ?? {}),
-      faucetPending: { hash, reward, at: Date.now() },
+      faucetPending: { hash, reward, at: Date.now(), amountStroops: effectiveAmountStroops },
     }
     await writeClaims(liveClaims)
 
     const out = await pollSubmittedMint(server, hash)
     if (out.outcome === "SUCCESS") {
-      await markClaim(userAddress, reward)
+      await markClaim(userAddress, reward, hash, effectiveAmountStroops, liveClaims[userAddress].faucetPending?.at, tokenId)
       let streakInfo: StreakInfo | undefined
       if (reward === "daily") {
         const recorded = await recordDailyClaim(userAddress)
@@ -888,10 +1085,20 @@ export async function POST(req: NextRequest) {
       }
       // phase-132: record referral bonus on genesis claim
       let referralBonus: string | null = null
-      if (reward === "genesis" && body.referralCode && isReferralQuestEnabled()) {
+      if (reward === "genesis" && body.referralCode && isReferralQuestEnabled(userAddress)) {
         const refResult = await recordReferral(body.referralCode, userAddress)
         referralBonus = refResult.bonus
       }
+
+      if (isAnalyticsWarehouseEnabled(userAddress)) {
+        void recordWarehouseEvent({
+          surface: "claim",
+          stage: "claim_confirmed",
+          wallet: userAddress,
+          metadata: { hash, reward, amountStroops: effectiveAmountStroops },
+        }).catch(() => {})
+      }
+
       return NextResponse.json({
         ok: true,
         hash,
@@ -903,21 +1110,55 @@ export async function POST(req: NextRequest) {
     }
     if (out.outcome === "FAILED") {
       await clearFaucetPendingOnly(userAddress)
+      abortArcClaim(reward)
+
+      if (isAnalyticsWarehouseEnabled(userAddress)) {
+        void recordWarehouseEvent({
+          surface: "claim",
+          stage: "claim_failed",
+          wallet: userAddress,
+          reason: String(out.failed),
+          metadata: { hash, reward },
+        }).catch(() => {})
+      }
+
       return faucetMintLedgerFailedResponse(hash, out.failed)
     }
+
+    if (isAnalyticsWarehouseEnabled(userAddress)) {
+      void recordWarehouseEvent({
+        surface: "claim",
+        stage: "claim_status_202",
+        wallet: userAddress,
+        metadata: { hash, reward },
+      }).catch(() => {})
+    }
+
     return NextResponse.json(
       {
         ok: false,
         hash,
         pending: true,
         reward,
-        amountStroops: rewardAmountStroops(reward),
+        amountStroops: effectiveAmountStroops,
         note: "Transaction still pending on ledger. Retry the same reward in a few seconds.",
       },
       { status: 202 },
     )
   } catch (e) {
+    if (!payoutSubmitted) abortArcClaim(reward)
     const msg = e instanceof Error ? e.message : String(e)
+
+    if (isAnalyticsWarehouseEnabled(userAddress)) {
+      void recordWarehouseEvent({
+        surface: "claim",
+        stage: "claim_status_502",
+        wallet: userAddress,
+        reason: msg,
+        metadata: { reward },
+      }).catch(() => {})
+    }
+
     return NextResponse.json({ error: msg }, { status: 502 })
   }
 }
